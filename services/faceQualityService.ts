@@ -45,15 +45,15 @@ export async function assessFaceQuality(imagePath: string): Promise<FaceQualityR
   const face = faces[0];
   const { left, top, width, height } = face.frame;
 
-  const leftEye = face.leftEyeOpenProbability ?? 1;
-  const rightEye = face.rightEyeOpenProbability ?? 1;
-  if (leftEye < 0.5 || rightEye < 0.5) {
+  const leftEye = face.leftEyeOpenProbability;
+  const rightEye = face.rightEyeOpenProbability;
+  if ((leftEye ?? 0) < 0.5 || (rightEye ?? 0) < 0.5) {
     return { passed: false, reason: 'Eyes closed — open your eyes and try again.' };
   }
 
   console.log(
     `[FaceQuality] face detected bbox=(${left.toFixed(0)},${top.toFixed(0)},${width.toFixed(0)}x${height.toFixed(0)}) ` +
-    `leftEye=${leftEye.toFixed(2)} rightEye=${rightEye.toFixed(2)}`
+    `leftEye=${leftEye?.toFixed(2) ?? 'n/a'} rightEye=${rightEye?.toFixed(2) ?? 'n/a'}`
   );
 
   return {

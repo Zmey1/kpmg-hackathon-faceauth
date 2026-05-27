@@ -127,6 +127,7 @@ export default function VerificationScreen({ navigation }: Props) {
       const success = registeredUsers.length > 0 && finalScore >= MOBILEFACENET_COSINE_THRESHOLD;
 
       setPhase('done');
+      setIsRunning(false);
       navigation.replace('Result', {
         success,
         livenessPass: livenessResult.passed,
