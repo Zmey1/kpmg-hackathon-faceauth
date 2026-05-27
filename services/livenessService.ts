@@ -72,7 +72,7 @@ export function assessLiveness(face: {
   }
 
   // ── Check 2: Non-zero smile probability ──────────────────────────────────
-  if (smiling < SMILE_MIN) {
+  if (smiling <= SMILE_MIN) {
     return {
       passed: false,
       reason: 'Face appears static — please face the camera naturally.',
@@ -84,7 +84,7 @@ export function assessLiveness(face: {
   }
 
   // ── Check 3: Natural head pose ────────────────────────────────────────────
-  if (Math.abs(headYaw) > HEAD_YAW_MAX) {
+  if (Math.abs(headYaw) >= HEAD_YAW_MAX) {
     return {
       passed: false,
       reason: 'Head turned too far — look straight at the camera.',
@@ -95,7 +95,7 @@ export function assessLiveness(face: {
     };
   }
 
-  if (Math.abs(headRoll) > HEAD_ROLL_MAX) {
+  if (Math.abs(headRoll) >= HEAD_ROLL_MAX) {
     return {
       passed: false,
       reason: 'Head tilted too far — keep your head upright.',
