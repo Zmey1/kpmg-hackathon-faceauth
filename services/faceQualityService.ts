@@ -61,8 +61,8 @@ export async function assessFaceQuality(imagePath: string): Promise<FaceQualityR
     boundingBox: { left, top, width, height },
     leftEyeOpenProbability:  leftEye,
     rightEyeOpenProbability: rightEye,
-    smilingProbability:      face.smilingProbability,
-    headEulerAngleY:         face.headEulerAngleY,
-    headEulerAngleZ:         face.headEulerAngleZ,
+    smilingProbability:      (face as any).smilingProbability as number | undefined,
+    headEulerAngleY:         (face as any).headEulerAngleY as number | undefined,
+    headEulerAngleZ:         (face as any).headEulerAngleZ as number | undefined,
   };
 }
