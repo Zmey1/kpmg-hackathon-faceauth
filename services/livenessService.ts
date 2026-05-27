@@ -52,12 +52,29 @@ export function assessLiveness(face: {
   headEulerAngleY?:         number;
   headEulerAngleZ?:         number;
 }): LivenessResult {
-  const leftEye   = face.leftEyeOpenProbability  ?? 1;
-  const rightEye  = face.rightEyeOpenProbability ?? 1;
-  const smiling   = face.smilingProbability      ?? 0.5; // default: assume live if unknown
-  const headYaw   = face.headEulerAngleY         ?? 0;
-  const headRoll  = face.headEulerAngleZ         ?? 0;
-  const eyeScore  = Math.min(leftEye, rightEye);
+  // Fail closed: if ML Kit didn't return classification fields, we cannot assess
+  // liveness and must reject rather than silently pass.
+  if (
+    face.leftEyeOpenProbability  == null ||
+    face.rightEyeOpenProbability == null ||
+    face.smilingProbability      == null
+  ) {
+    return {
+      passed: false,
+      reason: 'Unable to assess liveness — ensure classificationMode is enabled and face is well-lit.',
+      eyeScore: 0,
+      smilingProbability: 0,
+      headYaw:  face.headEulerAngleY ?? 0,
+      headRoll: face.headEulerAngleZ ?? 0,
+    };
+  }
+
+  const leftEye  = face.leftEyeOpenProbability;
+  const rightEye = face.rightEyeOpenProbability;
+  const smiling  = face.smilingProbability;
+  const headYaw  = face.headEulerAngleY ?? 0;
+  const headRoll = face.headEulerAngleZ ?? 0;
+  const eyeScore = Math.min(leftEye, rightEye);
 
   // ── Check 1: Eyes open ────────────────────────────────────────────────────
   if (eyeScore < EYE_OPEN_MIN) {
@@ -72,7 +89,7 @@ export function assessLiveness(face: {
   }
 
   // ── Check 2: Non-zero smile probability ──────────────────────────────────
-  if (smiling <= SMILE_MIN) {
+  if (smiling < SMILE_MIN) {
     return {
       passed: false,
       reason: 'Face appears static — please face the camera naturally.',
