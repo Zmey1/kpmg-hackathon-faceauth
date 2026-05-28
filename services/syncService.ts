@@ -108,74 +108,84 @@ export async function getPendingSyncCount(): Promise<number> {
  * @returns number of items successfully synced
  */
 export async function processQueue(): Promise<number> {
-  const queue   = await readQueue();
-  const pending = queue.filter(i => !i.synced);
-
-  if (pending.length === 0) {
-    console.log('[Sync] Queue empty — nothing to sync.');
+  if (_isSyncing) {
+    console.log('[Sync] processQueue already in progress — skipping.');
     return 0;
   }
-
-  console.log(`[Sync] Uploading ${pending.length} items to AWS…`);
-
-  const url     = `${AWS_CONFIG.apiEndpoint}${AWS_CONFIG.syncPath}`;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (AWS_CONFIG.apiKey) headers['x-api-key'] = AWS_CONFIG.apiKey;
-
-  let syncedIds: string[] = [];
-
+  _isSyncing = true;
   try {
-    const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), AWS_CONFIG.timeoutMs);
+    const queue   = await readQueue();
+    const pending = queue.filter(i => !i.synced);
 
-    const response = await fetch(url, {
-      method:  'POST',
-      headers,
-      body:    JSON.stringify({ items: pending }),
-      signal:  controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) throw new Error(`AWS returned HTTP ${response.status}`);
-
-    const body = (await response.json()) as { syncedIds?: string[] };
-    syncedIds  = body.syncedIds ?? pending.map(i => i.id);
-    console.log(`[Sync] AWS confirmed ${syncedIds.length} items.`);
-  } catch (err) {
-    console.warn('[Sync] Upload failed:', err);
-    const updated = queue.map(item =>
-      pending.find(p => p.id === item.id)
-        ? { ...item, retryCount: item.retryCount + 1 }
-        : item
-    );
-    await writeQueue(updated);
-    return 0;
-  }
-
-  // Mark synced
-  const updatedQueue = queue.map(item =>
-    syncedIds.includes(item.id) ? { ...item, synced: true } : item
-  );
-  await writeQueue(updatedQueue);
-
-  // Purge local face templates for confirmed FACE_TEMPLATE items
-  const syncedTemplates = updatedQueue.filter(
-    i => i.synced && i.type === 'FACE_TEMPLATE'
-  );
-  for (const item of syncedTemplates) {
-    const employeeId = (item.payload as FaceTemplatePayload).employeeId;
-    if (employeeId) {
-      await deleteRegisteredUser(employeeId);
-      console.log(`[Sync] Purged local template for ${employeeId}.`);
+    if (pending.length === 0) {
+      console.log('[Sync] Queue empty — nothing to sync.');
+      return 0;
     }
-  }
 
-  return syncedIds.length;
+    console.log(`[Sync] Uploading ${pending.length} items to AWS…`);
+
+    const url     = `${AWS_CONFIG.apiEndpoint}${AWS_CONFIG.syncPath}`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (AWS_CONFIG.apiKey) headers['x-api-key'] = AWS_CONFIG.apiKey;
+
+    let syncedIds: string[] = [];
+
+    try {
+      const controller = new AbortController();
+      const timeout    = setTimeout(() => controller.abort(), AWS_CONFIG.timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method:  'POST',
+          headers,
+          body:    JSON.stringify({ items: pending }),
+          signal:  controller.signal,
+        });
+        if (!response.ok) throw new Error(`AWS returned HTTP ${response.status}`);
+        const body = (await response.json()) as { syncedIds?: string[] };
+        syncedIds  = body.syncedIds ?? pending.map(i => i.id);
+        console.log(`[Sync] AWS confirmed ${syncedIds.length} items.`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err) {
+      console.warn('[Sync] Upload failed:', err);
+      const updated = queue.map(item =>
+        pending.find(p => p.id === item.id)
+          ? { ...item, retryCount: item.retryCount + 1 }
+          : item
+      );
+      await writeQueue(updated);
+      return 0;
+    }
+
+    // Mark synced and compact — remove synced items from the persisted queue
+    const updatedQueue = queue
+      .map(item => syncedIds.includes(item.id) ? { ...item, synced: true } : item)
+      .filter(item => !item.synced);
+    await writeQueue(updatedQueue);
+
+    // Purge local face templates for confirmed FACE_TEMPLATE items
+    const syncedTemplates = queue.filter(
+      i => syncedIds.includes(i.id) && i.type === 'FACE_TEMPLATE'
+    );
+    for (const item of syncedTemplates) {
+      const employeeId = (item.payload as FaceTemplatePayload).employeeId;
+      if (employeeId) {
+        await deleteRegisteredUser(employeeId);
+        console.log(`[Sync] Purged local template for ${employeeId}.`);
+      }
+    }
+
+    return syncedIds.length;
+  } finally {
+    _isSyncing = false;
+  }
 }
 
 // ─── Network listener ──────────────────────────────────────────────────────────
 
 let _listenerActive = false;
+let _isSyncing = false;
 
 /**
  * Register a NetInfo listener that auto-triggers processQueue() when
