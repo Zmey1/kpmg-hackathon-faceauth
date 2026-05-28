@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { useIsFocused } from '@react-navigation/native';
@@ -45,6 +47,12 @@ export default function VerificationScreen({ navigation }: Props) {
   const [modelReady, setModelReady] = useState(false);
   const [mockMode, setMockMode] = useState(false);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', setAppState);
+    return () => sub.remove();
+  }, []);
 
   React.useEffect(() => {
     Promise.all([
@@ -210,7 +218,7 @@ export default function VerificationScreen({ navigation }: Props) {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive={isFocused && phase !== 'done'}
+        isActive={isFocused && phase !== 'done' && appState === 'active'}
         photo
       />
 

@@ -24,12 +24,6 @@ import { LivenessResult } from '../types/verification';
 /** Both eyes must exceed this probability (0–1). */
 const EYE_OPEN_MIN = 0.5;
 
-/**
- * Minimum smiling probability.
- * Live faces almost always have a non-zero value; many printed photos return 0.0.
- * Threshold is deliberately low (0.01) — we only filter hard-zero cases.
- */
-const SMILE_MIN = 0.01;
 
 /** Maximum absolute yaw (left-right rotation). Beyond this = unnatural for auth. */
 const HEAD_YAW_MAX = 30;
@@ -88,19 +82,7 @@ export function assessLiveness(face: {
     };
   }
 
-  // ── Check 2: Non-zero smile probability ──────────────────────────────────
-  if (smiling < SMILE_MIN) {
-    return {
-      passed: false,
-      reason: 'Face appears static — please face the camera naturally.',
-      eyeScore,
-      smilingProbability: smiling,
-      headYaw,
-      headRoll,
-    };
-  }
-
-  // ── Check 3: Natural head pose ────────────────────────────────────────────
+  // ── Check 2: Natural head pose ────────────────────────────────────────────
   if (Math.abs(headYaw) >= HEAD_YAW_MAX) {
     return {
       passed: false,
