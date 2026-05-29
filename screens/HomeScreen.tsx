@@ -10,7 +10,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import StatusCard from '../components/StatusCard';
-import { getPendingSyncCount, processQueue } from '../services/syncService';
+import { getPendingSyncCount } from '../services/syncService';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -18,7 +18,6 @@ type Props = {
 
 export default function HomeScreen({ navigation }: Props) {
   const [pendingSync, setPendingSync] = useState(0);
-  const [syncing, setSyncing]         = useState(false);
 
   useEffect(() => {
     const refresh = () => getPendingSyncCount().then(setPendingSync);
@@ -26,14 +25,6 @@ export default function HomeScreen({ navigation }: Props) {
     const interval = setInterval(refresh, 5000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleManualSync = async () => {
-    setSyncing(true);
-    await processQueue();
-    const count = await getPendingSyncCount();
-    setPendingSync(count);
-    setSyncing(false);
-  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -62,7 +53,7 @@ export default function HomeScreen({ navigation }: Props) {
             <StatusCard label="Local Templates" value="Ready"     status="success" />
             <StatusCard
               label="Sync Queue"
-              value={syncing ? 'Syncing…' : `${pendingSync} pending`}
+              value={pendingSync === 0 ? 'Up to date' : `${pendingSync} pending`}
               status={pendingSync === 0 ? 'success' : 'neutral'}
             />
           </View>
@@ -86,25 +77,20 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.secondaryButtonText}>Register Face</Text>
           </TouchableOpacity>
 
-          {pendingSync > 0 && (
-            <TouchableOpacity
-              style={[styles.syncButton, syncing && styles.syncButtonBusy]}
-              onPress={handleManualSync}
-              disabled={syncing}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.syncButtonText}>
-                {syncing ? 'Syncing…' : `Sync ${pendingSync} item${pendingSync !== 1 ? 's' : ''} to AWS`}
-              </Text>
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity
             style={styles.ghostButton}
             onPress={() => navigation.navigate('RegisteredUsers')}
             activeOpacity={0.85}
           >
             <Text style={styles.ghostButtonText}>View Registered Users</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.ghostButton}
+            onPress={() => navigation.navigate('Dashboard')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ghostButtonText}>Attendance Dashboard</Text>
           </TouchableOpacity>
         </View>
 
@@ -231,24 +217,5 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
     lineHeight: 18,
-  },
-  syncButton: {
-    backgroundColor: '#D97706',
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: 'center' as const,
-    shadowColor: '#D97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  syncButtonBusy: {
-    opacity: 0.7,
-  },
-  syncButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600' as const,
   },
 });

@@ -12,6 +12,7 @@ import ResultScreen from './screens/ResultScreen';
 import RegistrationFormScreen from './screens/RegistrationFormScreen';
 import FaceRegistrationCameraScreen from './screens/FaceRegistrationCameraScreen';
 import RegisteredUsersScreen from './screens/RegisteredUsersScreen';
+import DashboardScreen from './screens/DashboardScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -36,6 +37,7 @@ export default function App() {
           <Stack.Screen name="RegistrationForm"        component={RegistrationFormScreen} />
           <Stack.Screen name="FaceRegistrationCamera"  component={FaceRegistrationCameraScreen} />
           <Stack.Screen name="RegisteredUsers"         component={RegisteredUsersScreen} />
+          <Stack.Screen name="Dashboard"              component={DashboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

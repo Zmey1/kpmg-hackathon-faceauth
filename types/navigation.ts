@@ -17,4 +17,5 @@ export type RootStackParamList = {
     name: string;
   };
   RegisteredUsers: undefined;
+  Dashboard: undefined;
 };
