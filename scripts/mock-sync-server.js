@@ -5,15 +5,42 @@
  *   GET  /attendance  ?limit=N                          →  { events: AttendanceEvent[] }
  *
  * Run: node scripts/mock-sync-server.js
- * Then set constants/aws.ts → apiEndpoint to one of:
- *   Android emulator : http://10.0.2.2:3001
- *   Physical device  : http://<YOUR_LAN_IP>:3001
+ * On startup, auto-detects LAN IP and patches constants/aws.ts so the app
+ * connects to this server without any manual config.
  */
 
 const http = require('http');
+const os   = require('os');
+const fs   = require('fs');
+const path = require('path');
 
 const PORT = 3001;
 const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+
+// ── Auto-detect LAN IP ─────────────────────────────────────────────────────────
+
+function getLanIp() {
+  const nets = os.networkInterfaces();
+  for (const iface of Object.values(nets)) {
+    for (const addr of iface ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return null;
+}
+
+// ── Auto-patch constants/aws.ts ────────────────────────────────────────────────
+
+function patchAwsConfig(ip) {
+  const configPath = path.resolve(__dirname, '../constants/aws.ts');
+  let src = fs.readFileSync(configPath, 'utf8');
+  // Replace the active (non-commented) apiEndpoint line with the detected IP
+  src = src.replace(
+    /^(\s*apiEndpoint:\s*)'http:\/\/[^']+',/m,
+    `$1'http://${ip}:${PORT}',`
+  );
+  fs.writeFileSync(configPath, src, 'utf8');
+}
 
 // In-memory store — same shape as DynamoDB rows in production
 const store = [];
@@ -126,11 +153,23 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  log(`Mock sync server listening on port ${PORT}`);
-  log(`Routes:`);
+  const lanIp = getLanIp();
+
+  if (lanIp) {
+    try {
+      patchAwsConfig(lanIp);
+      log(`Auto-patched constants/aws.ts → apiEndpoint: http://${lanIp}:${PORT}`);
+    } catch (e) {
+      log(`WARN: could not patch constants/aws.ts — ${e.message}`);
+      log(`Manually set apiEndpoint: http://${lanIp}:${PORT}`);
+    }
+  } else {
+    log(`WARN: could not detect LAN IP — set apiEndpoint manually`);
+  }
+
+  log(`Listening on port ${PORT}`);
   log(`  POST /sync        — receive verification events + face templates`);
   log(`  GET  /attendance  — fetch verification history (in-memory)`);
-  log(`Set apiEndpoint in constants/aws.ts to:`);
-  log(`  Android emulator : http://10.0.2.2:${PORT}`);
-  log(`  Physical device  : http://<YOUR_LAN_IP>:${PORT}`);
+  log(`  Android emulator  — http://10.0.2.2:${PORT}`);
+  if (lanIp) log(`  Physical device   — http://${lanIp}:${PORT}  ← auto-set`);
 });
