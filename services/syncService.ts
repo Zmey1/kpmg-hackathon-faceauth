@@ -189,12 +189,24 @@ let _isSyncing = false;
 
 /**
  * Register a NetInfo listener that auto-triggers processQueue() when
- * the device comes online. Call once from App.tsx on startup.
+ * the device comes online. Also syncs on startup if already connected,
+ * and runs a 30-second periodic sweep so queued items drain without
+ * requiring a connectivity change event.
+ * Call once from App.tsx on startup.
  */
 export function startSyncListener(): void {
   if (_listenerActive) return;
   _listenerActive = true;
 
+  // Trigger immediately if already online at boot
+  NetInfo.fetch().then(state => {
+    if (state.isConnected === true && state.isInternetReachable !== false) {
+      console.log('[Sync] Already online at boot — running initial sync.');
+      processQueue().catch(err => console.warn('[Sync] Boot sync error:', err));
+    }
+  });
+
+  // Sync on connectivity restore
   NetInfo.addEventListener(state => {
     if (state.isConnected === true && state.isInternetReachable === true) {
       console.log('[Sync] Network restored — triggering auto-sync.');
@@ -202,5 +214,10 @@ export function startSyncListener(): void {
     }
   });
 
-  console.log('[Sync] Network listener active.');
+  // Periodic sweep — catches items added while already online
+  setInterval(() => {
+    processQueue().catch(err => console.warn('[Sync] Periodic sync error:', err));
+  }, 30_000);
+
+  console.log('[Sync] Network listener active (periodic sweep every 30s).');
 }
