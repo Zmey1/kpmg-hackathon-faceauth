@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { RootStackParamList } from './types/navigation';
 import { startSyncListener } from './services/syncService';
+import { registerBackgroundSync } from './services/backgroundSyncTask'; // must be top-level import
 import HomeScreen from './screens/HomeScreen';
 import VerificationScreen from './screens/VerificationScreen';
 import ResultScreen from './screens/ResultScreen';
@@ -17,7 +18,10 @@ import DashboardScreen from './screens/DashboardScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
-  React.useEffect(() => { startSyncListener(); }, []);
+  React.useEffect(() => {
+    startSyncListener();
+    registerBackgroundSync();
+  }, []);
 
   return (
     <SafeAreaProvider>

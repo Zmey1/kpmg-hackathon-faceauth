@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "FaceAuth Lite",
+    "slug": "faceauth-lite",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0F1117"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.faceauth.lite",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device."
+      }
+    },
+    "android": {
+      "package": "com.faceauth.lite",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F1117"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device."
+        }
+      ],
+      "expo-font"
+    ],
+    "newArchEnabled": true
+  }
+}

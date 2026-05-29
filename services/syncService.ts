@@ -214,10 +214,5 @@ export function startSyncListener(): void {
     }
   });
 
-  // Periodic sweep — catches items added while already online
-  setInterval(() => {
-    processQueue().catch(err => console.warn('[Sync] Periodic sync error:', err));
-  }, 30_000);
-
-  console.log('[Sync] Network listener active (periodic sweep every 30s).');
+  console.log('[Sync] Network listener active.');
 }
