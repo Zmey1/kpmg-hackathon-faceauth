@@ -1,36 +1,69 @@
 # Project Context
 
-## What This Is
-React Native (Expo 52) offline face auth app. KPMG Hackathon 7.0. Deadline: 05.06.2026.
-Field workers authenticate via face on Android/iOS. Zero internet required during auth.
+App: React Native (Expo 52) offline face auth. KPMG Hackathon 7.0. Deadline: 05.06.2026.
+Goal: field workers tap button → face scanned → PASS/FAIL. No internet needed. Results sync to AWS later.
+Must integrate into existing "Datalake 3.0" RN app. Model < 20MB, speed < 1 sec, accuracy > 95%.
 
-## Stack
-- `react-native-fast-tflite` — runs MobileFaceNet TFLite model on-device
-- `@react-native-ml-kit/face-detection` — face detection + classification (eyes, smile, head pose)
-- `react-native-vision-camera` — camera capture
-- `expo-file-system` — local storage for templates + sync queue
+## Pipeline (one button tap)
+Photo → ML Kit face detect (fast mode) → passive liveness (eyes+pose) → LBP texture anti-spoof → MobileFaceNet 112×112 → 192-dim embedding → dot product vs stored templates (threshold 0.65) → PASS/FAIL → enqueue to sync queue
 
-## Pipeline (verification)
-1. Capture photo → ML Kit quality check (1 face, eyes open, bounding box)
-2. Reuse same face data → passive liveness check (eye open + smile prob + head pose)
-3. Crop + resize 112×112 → MobileFaceNet embedding (192-dim, L2 normalized)
-4. Cosine similarity vs stored templates → threshold 0.65 → PASS/FAIL
-5. Enqueue result to sync queue
+## Anti-Spoofing Status
+- LBP texture entropy (64×64 crop, threshold 4.2) — implemented, catches printed photos, FAILS against screen replay
+- TODO: add multi-frame landmark jitter OR MiniFASNet TFLite to defeat screen attacks
+  - Option A (no model): 5x takeSnapshot() → ML Kit landmark velocity across frames (~200ms, 92-98% vs screens)
+  - Option B (small model ~2MB): MiniFASNet TFLite via react-native-fast-tflite (~50-100ms, broader coverage)
 
-## Key Services
-- `services/livenessService.ts` — `assessLiveness(face)` passive check, NO challenges
-- `services/faceQualityService.ts` — ML Kit wrapper, returns full face data including smileProb/headAngles
-- `services/mobileFaceNetService.ts` — TFLite inference, embedding generation
-- `services/verificationService.ts` — cosine match against stored templates
-- `services/syncService.ts` — offline queue → AWS upload on reconnect → purge local templates
-- `services/faceTemplateStore.ts` — JSON file storage per user
+## Services
+- `faceQualityService` — ML Kit detect, returns bbox + eye probs + head angles
+- `livenessService` — passive check (eyes open + head pose), uses ML Kit data from quality photo
+- `textureAnalysisService` — LBP entropy anti-spoofing on 64×64 face crop
+- `mobileFaceNetService` — TFLite model load + embedding; `dotProduct()` for normalized vecs
+- `faceTemplateStore` — JSON files per user, in-memory cache
+- `verificationService` — matches embedding vs templates
+- `syncService` — queue items, upload to AWS on reconnect, purge local templates after confirm
+- `attendanceService` — fetch GET /attendance from server for dashboard
+- `backgroundSyncTask` — WorkManager background sync via expo-background-fetch (fires on network, even when app killed)
 
-## Sync Flow
-Queue at `faceauth/sync_queue.json`. NetInfo listener auto-triggers `processQueue()` on reconnect. AWS endpoint in `constants/aws.ts` (placeholder URL, replace before demo).
+## Sync API contract
+POST `{apiEndpoint}/sync`       body: `{ items: SyncQueueItem[] }`  response: `{ syncedIds: string[] }`
+GET  `{apiEndpoint}/attendance` query: `?limit=N`                    response: `{ events: AttendanceEvent[] }`
+Config in `constants/aws.ts`. `startSyncListener()` called in App.tsx on boot.
+Auto-sync triggers: boot (if already online), network restore event, WorkManager background task (~15 min interval).
+Mock server: `node scripts/mock-sync-server.js` — auto-detects LAN IP and patches `constants/aws.ts`.
 
-## Active Bugs (fix these next)
-1. **Liveness rejects real faces** — `smilingProbability: 0.005` fails because `SMILE_MIN = 0.01`. Real neutral faces return low but non-zero values. Fix: lower threshold to `0.001` or drop smile check entirely.
-2. **Camera black after phone lock** — Vision Camera `isActive` needs `AppState === 'active'` guard. Fix: add `AppState.addEventListener` and include in `isActive` prop.
+## Models / Constants
+- `assets/models/mobilefacenet.tflite` — float32, 192-dim output
+- `constants/model.ts` — threshold 0.65, embedding size 192, LBP_ENTROPY_THRESHOLD 4.2
+- `constants/aws.ts` — auto-patched by mock server; replace apiEndpoint before demo
+
+## Infrastructure (not deployed yet)
+- `infra/main.tf` — Terraform: DynamoDB (PAY_PER_REQUEST) + Lambda (Node.js 20.x) + API Gateway HTTP API
+- `infra/lambda/index.js` — Lambda handler mirroring mock server exactly
+- Deploy: `cd infra && terraform apply -var="region=ap-south-1"`; copy api_url output into `constants/aws.ts`
 
 ## Navigation
 Home → Verification → Result | Home → RegistrationForm → FaceRegistrationCamera → Home
+Home → RegisteredUsers | Home → Dashboard (attendance history from server)
+
+## Screens
+- `HomeScreen` — status cards (offline mode, templates, sync queue), action buttons
+- `VerificationScreen` — camera + full pipeline (quality → liveness → LBP → embedding → match)
+- `ResultScreen` — PASS/FAIL result display
+- `RegistrationFormScreen` — enter employee ID + name
+- `FaceRegistrationCameraScreen` — capture 3–5 face samples, generate templates
+- `RegisteredUsersScreen` — list locally registered users
+- `DashboardScreen` — attendance history pulled from server (summary stats + event list)
+
+## Dev Workflow
+1. `node scripts/mock-sync-server.js` — starts server, auto-patches LAN IP into constants/aws.ts
+2. `npx expo run:android` — builds and installs (JS + model bundled into APK via bundleInDebug=true)
+3. Unplug USB — app runs fully offline; syncs automatically when network available
+
+## TODO (priority order)
+1. Anti-spoofing: implement multi-frame landmark jitter OR MiniFASNet TFLite (screen replay still passes)
+2. Deploy AWS infra: run terraform, update apiEndpoint in constants/aws.ts
+3. Integration into existing Datalake 3.0 app
+4. Final presentation / demo prep
+
+## Evaluation (100 marks)
+Innovation 30 · Feasibility 30 · Scalability/Sync 20 · Presentation/Docs 20
