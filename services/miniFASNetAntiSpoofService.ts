@@ -59,6 +59,47 @@ async function _doInit(): Promise<void> {
   }
 }
 
+// ─── Crop helper ─────────────────────────────────────────────────────────────
+
+async function _cropForMiniFAS(
+  uri: string,
+  bx: number, by: number, bw: number, bh: number,
+  imgW: number, imgH: number,
+) {
+  const CROP_SCALE = 2.7;
+  const scale = Math.min((imgH - 1) / bh, Math.min((imgW - 1) / bw, CROP_SCALE));
+  const newW = bw * scale;
+  const newH = bh * scale;
+  const cx = bx + bw / 2;
+  const cy = by + bh / 2;
+
+  let ltX = cx - newW / 2;
+  let ltY = cy - newH / 2;
+  let rbX = cx + newW / 2;
+  let rbY = cy + newH / 2;
+
+  if (ltX < 0)        { rbX -= ltX;            ltX = 0; }
+  if (ltY < 0)        { rbY -= ltY;            ltY = 0; }
+  if (rbX > imgW - 1) { ltX -= rbX - imgW + 1; rbX = imgW - 1; }
+  if (rbY > imgH - 1) { ltY -= rbY - imgH + 1; rbY = imgH - 1; }
+
+  const x1 = Math.max(0, Math.round(ltX));
+  const y1 = Math.max(0, Math.round(ltY));
+  const x2 = Math.min(imgW, Math.round(rbX) + 1);
+  const y2 = Math.min(imgH, Math.round(rbY) + 1);
+  const cropW = Math.max(1, x2 - x1);
+  const cropH = Math.max(1, y2 - y1);
+
+  return ImageManipulator.manipulateAsync(
+    uri,
+    [
+      { crop: { originX: x1, originY: y1, width: cropW, height: cropH } },
+      { resize: { width: MINIFASNET_INPUT_SIZE, height: MINIFASNET_INPUT_SIZE } },
+    ],
+    { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
+  );
+}
+
 // ─── Inference ────────────────────────────────────────────────────────────────
 
 export async function assessMiniFASNetLiveness(
@@ -79,45 +120,13 @@ export async function assessMiniFASNetLiveness(
 
     // Port of MiniFASNet _get_new_box: scale=2.7 is encoded in the model filename.
     // The model needs 2.7× context around the face to detect lighting/depth/edge spoofing cues.
-    const CROP_SCALE = 2.7;
     const { left: bx, top: by, width: bw, height: bh } = cropBox;
-    const { width: imgW, height: imgH } = imageSize;
 
-    const scale = Math.min((imgH - 1) / bh, Math.min((imgW - 1) / bw, CROP_SCALE));
-    const newW = bw * scale;
-    const newH = bh * scale;
-    const cx = bx + bw / 2;
-    const cy = by + bh / 2;
-
-    let ltX = cx - newW / 2;
-    let ltY = cy - newH / 2;
-    let rbX = cx + newW / 2;
-    let rbY = cy + newH / 2;
-
-    if (ltX < 0)        { rbX -= ltX;            ltX = 0; }
-    if (ltY < 0)        { rbY -= ltY;            ltY = 0; }
-    if (rbX > imgW - 1) { ltX -= rbX - imgW + 1; rbX = imgW - 1; }
-    if (rbY > imgH - 1) { ltY -= rbY - imgH + 1; rbY = imgH - 1; }
-
-    // Convert to integer pixel bounds, then derive width/height so that
-    // originX + cropW <= imgW and originY + cropH <= imgH always hold.
-    const x1 = Math.max(0, Math.round(ltX));
-    const y1 = Math.max(0, Math.round(ltY));
-    const x2 = Math.min(imgW, Math.round(rbX) + 1); // exclusive end
-    const y2 = Math.min(imgH, Math.round(rbY) + 1);
-    const originX = x1;
-    const originY = y1;
-    const cropW   = Math.max(1, x2 - x1);
-    const cropH   = Math.max(1, y2 - y1);
-
-    const processed = await ImageManipulator.manipulateAsync(
-      uri,
-      [
-        { crop: { originX, originY, width: cropW, height: cropH } },
-        { resize: { width: MINIFASNET_INPUT_SIZE, height: MINIFASNET_INPUT_SIZE } },
-      ],
-      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
-    );
+    // photo.width/height are physical sensor dimensions but expo-image-manipulator applies
+    // EXIF rotation automatically. Compute crop with reported dims first; if that overflows
+    // (bounds error), retry with swapped dims to handle portrait/landscape mismatch.
+    const processed = await _cropForMiniFAS(uri, bx, by, bw, bh, imageSize.width, imageSize.height)
+      .catch(() => _cropForMiniFAS(uri, bx, by, bw, bh, imageSize.height, imageSize.width));
 
     const b64 = await FileSystem.readAsStringAsync(processed.uri, {
       encoding: FileSystem.EncodingType.Base64,
@@ -160,8 +169,7 @@ export async function assessMiniFASNetLiveness(
     const passed = realScore >= MINIFASNET_THRESHOLD;
 
     console.log(
-      `[MiniFASNet] crop=${cropW}×${cropH} scale=${scale.toFixed(2)} ` +
-      `probs=[${probs.map(p => p.toFixed(3)).join(', ')}] ` +
+      `[MiniFASNet] probs=[${probs.map(p => p.toFixed(3)).join(', ')}] ` +
       `realScore=${realScore.toFixed(3)} → ${passed ? 'PASS' : 'FAIL'}`
     );
 
