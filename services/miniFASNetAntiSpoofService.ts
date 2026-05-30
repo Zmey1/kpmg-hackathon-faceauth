@@ -8,6 +8,7 @@ import {
   MINIFASNET_INPUT_SIZE,
   MINIFASNET_REAL_IDX,
   MINIFASNET_THRESHOLD,
+  MINIFASNET_SPOOF_MAX,
 } from '../constants/model';
 import type { BoundingBox } from './faceQualityService';
 
@@ -165,12 +166,13 @@ export async function assessMiniFASNetLiveness(
     const expSum = exps.reduce((a, b) => a + b, 0);
     const probs = exps.map(x => x / expSum);
 
-    const realScore = probs[MINIFASNET_REAL_IDX];
-    const passed = realScore >= MINIFASNET_THRESHOLD;
+    const realScore  = probs[MINIFASNET_REAL_IDX];
+    const spoofScore = Math.max(probs[0], probs[2]); // max of print(0) and screen(2) classes
+    const passed = realScore >= MINIFASNET_THRESHOLD && spoofScore < MINIFASNET_SPOOF_MAX;
 
     console.log(
       `[MiniFASNet] probs=[${probs.map(p => p.toFixed(3)).join(', ')}] ` +
-      `realScore=${realScore.toFixed(3)} → ${passed ? 'PASS' : 'FAIL'}`
+      `real=${realScore.toFixed(3)} spoof=${spoofScore.toFixed(3)} → ${passed ? 'PASS' : 'FAIL'}`
     );
 
     return { passed, realScore };

@@ -36,3 +36,6 @@ export const MINIFASNET_INPUT_SIZE   = 80;
 export const MINIFASNET_REAL_IDX     = 1;
 // Lower = more permissive (fewer false-rejects). Raise toward 0.8 for stricter security.
 export const MINIFASNET_THRESHOLD    = 0.75;
+// Max allowed score for either spoof class (0=print, 2=screen replay).
+// Real faces score ~0.000 on both; screen attacks leak ~0.06+ into class 2.
+export const MINIFASNET_SPOOF_MAX    = 0.05;
