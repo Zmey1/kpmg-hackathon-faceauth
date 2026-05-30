@@ -77,13 +77,32 @@ export async function assessMiniFASNetLiveness(
   try {
     const uri = imagePath.startsWith('file://') ? imagePath : `file://${imagePath}`;
 
-    // Crop face with 15% padding, resize to 80×80
-    const padX = Math.round(cropBox.width  * 0.15);
-    const padY = Math.round(cropBox.height * 0.15);
-    const originX = Math.max(0, Math.round(cropBox.left - padX));
-    const originY = Math.max(0, Math.round(cropBox.top  - padY));
-    const cropW   = Math.min(imageSize.width  - originX, Math.round(cropBox.width  + padX * 2));
-    const cropH   = Math.min(imageSize.height - originY, Math.round(cropBox.height + padY * 2));
+    // Port of MiniFASNet _get_new_box: scale=2.7 is encoded in the model filename.
+    // The model needs 2.7× context around the face to detect lighting/depth/edge spoofing cues.
+    const CROP_SCALE = 2.7;
+    const { left: bx, top: by, width: bw, height: bh } = cropBox;
+    const { width: imgW, height: imgH } = imageSize;
+
+    const scale = Math.min((imgH - 1) / bh, Math.min((imgW - 1) / bw, CROP_SCALE));
+    const newW = bw * scale;
+    const newH = bh * scale;
+    const cx = bx + bw / 2;
+    const cy = by + bh / 2;
+
+    let ltX = cx - newW / 2;
+    let ltY = cy - newH / 2;
+    let rbX = cx + newW / 2;
+    let rbY = cy + newH / 2;
+
+    if (ltX < 0)        { rbX -= ltX;           ltX = 0; }
+    if (ltY < 0)        { rbY -= ltY;           ltY = 0; }
+    if (rbX > imgW - 1) { ltX -= rbX - imgW + 1; rbX = imgW - 1; }
+    if (rbY > imgH - 1) { ltY -= rbY - imgH + 1; rbY = imgH - 1; }
+
+    const originX = Math.round(Math.max(0, ltX));
+    const originY = Math.round(Math.max(0, ltY));
+    const cropW   = Math.round(rbX - ltX + 1);
+    const cropH   = Math.round(rbY - ltY + 1);
 
     const processed = await ImageManipulator.manipulateAsync(
       uri,
@@ -107,14 +126,14 @@ export async function assessMiniFASNetLiveness(
       maxMemoryUsageInMB: 16,
     });
 
-    // RGBA → BGR float32 normalized to [0, 1]
-    // Model was trained on OpenCV BGR images; swap R and B channels to match.
+    // RGBA → BGR raw float32 in [0, 255] — matches reference inference_tflite.py
+    // (model trained on OpenCV BGR images; softmax not baked into TFLite graph)
     const pixels = MINIFASNET_INPUT_SIZE * MINIFASNET_INPUT_SIZE;
     const input = new Float32Array(pixels * 3);
     for (let i = 0; i < pixels; i++) {
-      input[i * 3 + 0] = rgba[i * 4 + 2] / 255.0; // B
-      input[i * 3 + 1] = rgba[i * 4 + 1] / 255.0; // G
-      input[i * 3 + 2] = rgba[i * 4 + 0] / 255.0; // R
+      input[i * 3 + 0] = rgba[i * 4 + 2]; // B
+      input[i * 3 + 1] = rgba[i * 4 + 1]; // G
+      input[i * 3 + 2] = rgba[i * 4 + 0]; // R
     }
 
     const outputData = await _model.run([input]);
@@ -125,19 +144,19 @@ export async function assessMiniFASNetLiveness(
       return { passed: true, realScore: -1 };
     }
 
-    // Model outputs raw logits (softmax not baked in). Apply softmax to get probabilities.
+    // Apply softmax to convert logits → probabilities; index 1 = real face
     const maxLogit = Math.max(...Array.from(logits));
     const exps = Array.from(logits).map(x => Math.exp(x - maxLogit));
     const expSum = exps.reduce((a, b) => a + b, 0);
     const probs = exps.map(x => x / expSum);
 
-    // index 1 = real face probability
     const realScore = probs[MINIFASNET_REAL_IDX];
     const passed = realScore >= MINIFASNET_THRESHOLD;
 
     console.log(
-      `[MiniFASNet] probs=[${probs.map(p => p.toFixed(3)).join(', ')}] ` +
-      `realScore=${realScore.toFixed(3)} threshold=${MINIFASNET_THRESHOLD} → ${passed ? 'PASS' : 'FAIL'}`
+      `[MiniFASNet] crop=${cropW}×${cropH} scale=${scale.toFixed(2)} ` +
+      `probs=[${probs.map(p => p.toFixed(3)).join(', ')}] ` +
+      `realScore=${realScore.toFixed(3)} → ${passed ? 'PASS' : 'FAIL'}`
     );
 
     return { passed, realScore };
