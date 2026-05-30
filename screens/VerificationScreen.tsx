@@ -9,19 +9,21 @@ import {
   AppState,
   AppStateStatus,
 } from 'react-native';
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission, useCameraFormat } from 'react-native-vision-camera';
 import { useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { VerificationPhase } from '../types/verification';
 import CameraOverlay from '../components/CameraOverlay';
-import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode, cosineSimilarity } from '../services/mobileFaceNetService';
+import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode, dotProduct } from '../services/mobileFaceNetService';
 import { getAllRegisteredUsers } from '../services/faceTemplateStore';
 import { assessFaceQuality } from '../services/faceQualityService';
 import { assessLiveness } from '../services/livenessService';
+import { assessTextureLiveness } from '../services/textureAnalysisService';
 import { LivenessResult } from '../types/verification';
 import { RegisteredUser } from '../types/face';
 import { MOBILEFACENET_COSINE_THRESHOLD } from '../constants/model';
+import { enqueueSyncItem } from '../services/syncService';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Verification'>;
@@ -39,6 +41,9 @@ const PHASE_STEP_LABEL: Record<VerificationPhase, string> = {
 export default function VerificationScreen({ navigation }: Props) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
+  // Pick the smallest format that's still at least 1280px wide — enough for a face crop.
+  // Avoids 12MP default which bloats takePhoto, ML Kit, and manipulateAsync times.
+  const format = useCameraFormat(device, [{ photoResolution: { width: 1280, height: 960 } }]);
   const isFocused = useIsFocused();
   const cameraRef = useRef<Camera>(null);
 
@@ -74,18 +79,20 @@ export default function VerificationScreen({ navigation }: Props) {
     try {
       // ─── PHASE 1: Quality check ──────────────────────────────────────────
       setPhase('quality');
-      console.log('[Verify] taking photo...');
+      let t = Date.now();
       const photo = await cameraRef.current.takePhoto({ flash: 'off' });
-      console.log('[Verify] photo path:', photo.path);
+      console.log(`[Timing] takePhoto: ${Date.now() - t}ms`);
+
+      t = Date.now();
       const quality = await assessFaceQuality(photo.path);
-      console.log('[Verify] quality:', JSON.stringify(quality));
+      console.log(`[Timing] assessFaceQuality: ${Date.now() - t}ms`);
       if (!quality.passed) {
         setPhase('aligning');
         setIsRunning(false);
         return;
       }
 
-      // ── PHASE 2: Passive liveness (reuses face data from quality check — no extra photo) ──
+      // ── PHASE 2: Passive liveness ────────────────────────────────────────
       setPhase('liveness');
       const livenessResult: LivenessResult = assessLiveness({
         leftEyeOpenProbability:  quality.leftEyeOpenProbability,
@@ -101,38 +108,65 @@ export default function VerificationScreen({ navigation }: Props) {
         return;
       }
 
+      // ── PHASE 2b: Texture liveness (LBP anti-spoofing) ──────────────
+      if (quality.boundingBox) {
+        t = Date.now();
+        const textureResult = await assessTextureLiveness(
+          photo.path,
+          quality.boundingBox,
+          { width: photo.width, height: photo.height },
+        );
+        console.log(`[Timing] textureLiveness: ${Date.now() - t}ms`);
+        if (!textureResult.passed) {
+          console.log(`[Verify] texture liveness failed, entropy=${textureResult.entropy.toFixed(3)}`);
+          setPhase('aligning');
+          setIsRunning(false);
+          return;
+        }
+      }
+
       // ─── PHASE 3: Embedding + template match ────────────────────────────
       setPhase('matching');
-      const embedding = await generateEmbeddingFromImage(photo.path, quality.boundingBox);
-      console.log('[Verify] live embedding first 5:', embedding.slice(0, 5).map(v => v.toFixed(4)).join(', '));
+      t = Date.now();
+      const embedding = await generateEmbeddingFromImage(photo.path, quality.boundingBox, { width: photo.width, height: photo.height });
+      console.log(`[Timing] generateEmbedding: ${Date.now() - t}ms`);
 
+      t = Date.now();
       let bestScore = -1;
       let matchedUser: RegisteredUser | null = null;
-
-      for (const user of registeredUsers) {
+      outer: for (const user of registeredUsers) {
         for (const template of user.templates) {
           try {
-            const storedNorm = Math.sqrt(template.embedding.reduce((s, v) => s + v * v, 0));
-            const score = cosineSimilarity(embedding, template.embedding);
-            console.log(
-              `[Verify] user=${user.employeeId} template=${template.templateId} ` +
-              `storedNorm=${storedNorm.toFixed(4)} score=${score.toFixed(4)} ` +
-              `storedFirst5=[${template.embedding.slice(0, 5).map(v => v.toFixed(4)).join(', ')}]`
-            );
+            const score = dotProduct(embedding, template.embedding);
             if (score > bestScore) {
               bestScore = score;
               matchedUser = user;
+              if (score >= MOBILEFACENET_COSINE_THRESHOLD) break outer;
             }
           } catch {
             // dimension mismatch from a different model version — skip
           }
         }
       }
+      console.log(`[Timing] templateMatch: ${Date.now() - t}ms`);
 
       const finalScore = Math.max(0, bestScore);
-      console.log(`[Verify] bestScore=${finalScore.toFixed(4)} threshold=${MOBILEFACENET_COSINE_THRESHOLD} → ${finalScore >= MOBILEFACENET_COSINE_THRESHOLD ? 'PASS' : 'FAIL'} matchedUser=${matchedUser?.name ?? 'none'}`);
+      console.log(`[Verify] bestScore=${finalScore.toFixed(4)} → ${finalScore >= MOBILEFACENET_COSINE_THRESHOLD ? 'PASS' : 'FAIL'}`);
       const processingMs = Date.now() - startTime;
       const success = registeredUsers.length > 0 && finalScore >= MOBILEFACENET_COSINE_THRESHOLD;
+
+      enqueueSyncItem({
+        type: 'VERIFICATION_EVENT',
+        payload: {
+          employeeId:   matchedUser?.employeeId,
+          matchedName:  matchedUser?.name,
+          success,
+          livenessPass: livenessResult.passed,
+          matchScore:   finalScore,
+          processingMs: Date.now() - startTime,
+          timestamp:    new Date().toISOString(),
+        },
+      }).catch(err => console.warn('[Verify] Failed to enqueue sync item:', err));
 
       setPhase('done');
       setIsRunning(false);
@@ -218,6 +252,7 @@ export default function VerificationScreen({ navigation }: Props) {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
+        format={format}
         isActive={isFocused && phase !== 'done' && appState === 'active'}
         photo
       />
