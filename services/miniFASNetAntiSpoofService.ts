@@ -115,8 +115,13 @@ export async function assessMiniFASNetLiveness(
       input[i * 3 + 2] = rgba[i * 4 + 2] / 255.0; // B
     }
 
-    const outputData = _model.runSync([input]);
+    const outputData = await _model.run([input]);
     const scores = outputData[0] as Float32Array;
+
+    if (!scores || scores.length < MINIFASNET_REAL_IDX + 1) {
+      console.warn(`[MiniFASNet] Unexpected output length: ${scores?.length}`);
+      return { passed: true, realScore: -1 };
+    }
 
     // scores shape: [3] — index 1 = real face probability
     const realScore = scores[MINIFASNET_REAL_IDX];
