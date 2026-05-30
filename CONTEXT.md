@@ -8,15 +8,17 @@ Must integrate into existing "Datalake 3.0" RN app. Model < 20MB, speed < 1 sec,
 Photo → ML Kit face detect (fast mode) → passive liveness (eyes+pose) → LBP texture anti-spoof → MobileFaceNet 112×112 → 192-dim embedding → dot product vs stored templates (threshold 0.65) → PASS/FAIL → enqueue to sync queue
 
 ## Anti-Spoofing Status
-- LBP texture entropy (64×64 crop, threshold 4.2) — implemented, catches printed photos, FAILS against screen replay
-- TODO: add multi-frame landmark jitter OR MiniFASNet TFLite to defeat screen attacks
-  - Option A (no model): 5x takeSnapshot() → ML Kit landmark velocity across frames (~200ms, 92-98% vs screens)
-  - Option B (small model ~2MB): MiniFASNet TFLite via react-native-fast-tflite (~50-100ms, broader coverage)
+- LBP texture entropy (64×64 crop, threshold 4.2) — Phase 2b, catches printed photos fast (~50ms)
+- MiniFASNet V2 TFLite (80×80 crop, realScore threshold 0.6) — Phase 2c, catches screen replay (~70ms)
+  - Model: `assets/models/minifasnet.tflite` (1.7MB float32, from feni-katharotiya/Silent-Face-Anti-Spoofing-TFLite)
+  - Input: [1,80,80,3] NHWC float32 [0,1]; Output: [1,3] softmax, index 1 = real face prob
+  - Service: `services/miniFASNetAntiSpoofService.ts`
 
 ## Services
 - `faceQualityService` — ML Kit detect, returns bbox + eye probs + head angles
 - `livenessService` — passive check (eyes open + head pose), uses ML Kit data from quality photo
 - `textureAnalysisService` — LBP entropy anti-spoofing on 64×64 face crop
+- `miniFASNetAntiSpoofService` — MiniFASNet V2 TFLite screen-replay detection on 80×80 face crop
 - `mobileFaceNetService` — TFLite model load + embedding; `dotProduct()` for normalized vecs
 - `faceTemplateStore` — JSON files per user, in-memory cache
 - `verificationService` — matches embedding vs templates
@@ -60,7 +62,7 @@ Home → RegisteredUsers | Home → Dashboard (attendance history from server)
 3. Unplug USB — app runs fully offline; syncs automatically when network available
 
 ## TODO (priority order)
-1. Anti-spoofing: implement multi-frame landmark jitter OR MiniFASNet TFLite (screen replay still passes)
+1. ~~Anti-spoofing: implement MiniFASNet TFLite~~ — DONE: LBP (Phase 2b) + MiniFASNet V2 (Phase 2c)
 2. Deploy AWS infra: run terraform, update apiEndpoint in constants/aws.ts
 3. Integration into existing Datalake 3.0 app
 4. Final presentation / demo prep
