@@ -21,13 +21,14 @@ import { deleteRegisteredUser } from './faceTemplateStore';
 export type SyncItemType = 'VERIFICATION_EVENT' | 'FACE_TEMPLATE';
 
 export interface VerificationEventPayload {
-  employeeId?:  string;
-  matchedName?: string;
-  success:      boolean;
-  livenessPass: boolean;
-  matchScore:   number;
-  processingMs: number;
-  timestamp:    string;
+  employeeId?:     string;
+  matchedName?:    string;
+  success:         boolean;
+  livenessPass:    boolean;
+  matchScore:      number;
+  miniFASNetScore?: number;
+  processingMs:    number;
+  timestamp:       string;
 }
 
 export interface FaceTemplatePayload {
