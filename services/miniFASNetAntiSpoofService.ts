@@ -44,8 +44,15 @@ async function _doInit(): Promise<void> {
     const modelUri = asset.localUri;
     if (!modelUri) throw new Error('expo-asset resolved null localUri');
 
-    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'android-gpu';
-    _model = await loadTensorflowModel({ url: modelUri }, delegate);
+    // MiniFASNet uses ops from a PyTorch→ONNX→TFLite conversion chain that the
+    // GPU delegate rejects on many Android devices. Try GPU, fall back to CPU.
+    try {
+      const gpuDelegate = Platform.OS === 'ios' ? 'core-ml' : 'android-gpu';
+      _model = await loadTensorflowModel({ url: modelUri }, gpuDelegate);
+    } catch {
+      console.warn('[MiniFASNet] GPU delegate failed, retrying with CPU');
+      _model = await loadTensorflowModel({ url: modelUri }, 'default');
+    }
 
     console.log('[MiniFASNet] inputs:', JSON.stringify(_model.inputs));
     console.log('[MiniFASNet] outputs:', JSON.stringify(_model.outputs));
