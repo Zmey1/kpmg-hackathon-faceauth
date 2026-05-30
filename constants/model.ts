@@ -35,4 +35,4 @@ export const MINIFASNET_MODEL_PATH   = 'minifasnet.tflite'; // for reference —
 export const MINIFASNET_INPUT_SIZE   = 80;
 export const MINIFASNET_REAL_IDX     = 1;
 // Lower = more permissive (fewer false-rejects). Raise toward 0.8 for stricter security.
-export const MINIFASNET_THRESHOLD    = 0.6;
+export const MINIFASNET_THRESHOLD    = 0.75;

@@ -94,15 +94,21 @@ export async function assessMiniFASNetLiveness(
     let rbX = cx + newW / 2;
     let rbY = cy + newH / 2;
 
-    if (ltX < 0)        { rbX -= ltX;           ltX = 0; }
-    if (ltY < 0)        { rbY -= ltY;           ltY = 0; }
+    if (ltX < 0)        { rbX -= ltX;            ltX = 0; }
+    if (ltY < 0)        { rbY -= ltY;            ltY = 0; }
     if (rbX > imgW - 1) { ltX -= rbX - imgW + 1; rbX = imgW - 1; }
     if (rbY > imgH - 1) { ltY -= rbY - imgH + 1; rbY = imgH - 1; }
 
-    const originX = Math.round(Math.max(0, ltX));
-    const originY = Math.round(Math.max(0, ltY));
-    const cropW   = Math.round(rbX - ltX + 1);
-    const cropH   = Math.round(rbY - ltY + 1);
+    // Convert to integer pixel bounds, then derive width/height so that
+    // originX + cropW <= imgW and originY + cropH <= imgH always hold.
+    const x1 = Math.max(0, Math.round(ltX));
+    const y1 = Math.max(0, Math.round(ltY));
+    const x2 = Math.min(imgW, Math.round(rbX) + 1); // exclusive end
+    const y2 = Math.min(imgH, Math.round(rbY) + 1);
+    const originX = x1;
+    const originY = y1;
+    const cropW   = Math.max(1, x2 - x1);
+    const cropH   = Math.max(1, y2 - y1);
 
     const processed = await ImageManipulator.manipulateAsync(
       uri,
