@@ -20,6 +20,7 @@ import { getAllRegisteredUsers } from '../services/faceTemplateStore';
 import { assessFaceQuality } from '../services/faceQualityService';
 import { assessLiveness } from '../services/livenessService';
 import { assessTextureLiveness } from '../services/textureAnalysisService';
+import { initializeMiniFASNet, assessMiniFASNetLiveness } from '../services/miniFASNetAntiSpoofService';
 import { LivenessResult } from '../types/verification';
 import { RegisteredUser } from '../types/face';
 import { MOBILEFACENET_COSINE_THRESHOLD } from '../constants/model';
@@ -62,8 +63,9 @@ export default function VerificationScreen({ navigation }: Props) {
   React.useEffect(() => {
     Promise.all([
       initializeMobileFaceNet(),
+      initializeMiniFASNet(),
       getAllRegisteredUsers(),
-    ]).then(([, users]) => {
+    ]).then(([, , users]) => {
       setModelReady(true);
       setMockMode(isMockMode());
       setRegisteredUsers(users);
@@ -108,6 +110,7 @@ export default function VerificationScreen({ navigation }: Props) {
         return;
       }
 
+      let miniFASRealScore = -1;
       // ── PHASE 2b: Texture liveness (LBP anti-spoofing) ──────────────
       if (quality.boundingBox) {
         t = Date.now();
@@ -119,6 +122,24 @@ export default function VerificationScreen({ navigation }: Props) {
         console.log(`[Timing] textureLiveness: ${Date.now() - t}ms`);
         if (!textureResult.passed) {
           console.log(`[Verify] texture liveness failed, entropy=${textureResult.entropy.toFixed(3)}`);
+          setPhase('aligning');
+          setIsRunning(false);
+          return;
+        }
+      }
+
+      // ── PHASE 2c: MiniFASNet screen-replay anti-spoofing ────────────
+      if (quality.boundingBox) {
+        t = Date.now();
+        const miniFASResult = await assessMiniFASNetLiveness(
+          photo.path,
+          quality.boundingBox,
+          { width: photo.width, height: photo.height },
+        );
+        console.log(`[Timing] miniFASNetLiveness: ${Date.now() - t}ms`);
+        miniFASRealScore = miniFASResult.realScore;
+        if (!miniFASResult.passed) {
+          console.log(`[Verify] MiniFASNet liveness failed, realScore=${miniFASResult.realScore.toFixed(3)}`);
           setPhase('aligning');
           setIsRunning(false);
           return;
@@ -162,8 +183,9 @@ export default function VerificationScreen({ navigation }: Props) {
           matchedName:  matchedUser?.name,
           success,
           livenessPass: livenessResult.passed,
-          matchScore:   finalScore,
-          processingMs: Date.now() - startTime,
+          matchScore:      finalScore,
+          miniFASNetScore: miniFASRealScore,
+          processingMs:    Date.now() - startTime,
           timestamp:    new Date().toISOString(),
         },
       }).catch(err => console.warn('[Verify] Failed to enqueue sync item:', err));
