@@ -110,7 +110,6 @@ export default function VerificationScreen({ navigation }: Props) {
         return;
       }
 
-      let miniFASRealScore = -1;
       // ── PHASE 2b: Texture liveness (LBP anti-spoofing) ──────────────
       if (quality.boundingBox) {
         t = Date.now();
@@ -128,6 +127,7 @@ export default function VerificationScreen({ navigation }: Props) {
         }
       }
 
+      let miniFASRealScore = -1;
       // ── PHASE 2c: MiniFASNet screen-replay anti-spoofing ────────────
       if (quality.boundingBox) {
         t = Date.now();
