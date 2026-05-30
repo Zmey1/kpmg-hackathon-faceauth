@@ -27,3 +27,12 @@ export const REGISTRATION_STEPS = [
   "Smile naturally",
   "Look straight again",
 ];
+
+// ── MiniFASNet V2 anti-spoofing ───────────────────────────────────────────────
+// Input:  [1, 80, 80, 3] NHWC float32 in [0, 1] range
+// Output: [1, 3] softmax — index 1 = real face probability
+export const MINIFASNET_MODEL_PATH   = 'minifasnet.tflite';
+export const MINIFASNET_INPUT_SIZE   = 80;
+export const MINIFASNET_REAL_IDX     = 1;
+// Lower = more permissive (fewer false-rejects). Raise toward 0.8 for stricter security.
+export const MINIFASNET_THRESHOLD    = 0.6;
