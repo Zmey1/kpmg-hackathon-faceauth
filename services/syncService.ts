@@ -90,6 +90,8 @@ export async function enqueueSyncItem(
   });
   await writeQueue(queue);
   console.log(`[Sync] Enqueued ${item.type}. Queue size: ${queue.length}`);
+  // Attempt immediate upload — _isSyncing guard prevents concurrent runs
+  processQueue().catch(err => console.warn('[Sync] Post-enqueue sync error:', err));
 }
 
 /**
