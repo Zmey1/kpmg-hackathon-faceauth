@@ -44,15 +44,9 @@ async function _doInit(): Promise<void> {
     const modelUri = asset.localUri;
     if (!modelUri) throw new Error('expo-asset resolved null localUri');
 
-    // MiniFASNet uses ops from a PyTorch→ONNX→TFLite conversion chain that the
-    // GPU delegate rejects on many Android devices. Try GPU, fall back to CPU.
-    try {
-      const gpuDelegate = Platform.OS === 'ios' ? 'core-ml' : 'android-gpu';
-      _model = await loadTensorflowModel({ url: modelUri }, gpuDelegate);
-    } catch {
-      console.warn('[MiniFASNet] GPU delegate failed, retrying with CPU');
-      _model = await loadTensorflowModel({ url: modelUri }, 'default');
-    }
+    // MiniFASNet ONNX→TFLite conversion uses ops incompatible with android-gpu delegate.
+    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'default';
+    _model = await loadTensorflowModel({ url: modelUri }, delegate);
 
     console.log('[MiniFASNet] inputs:', JSON.stringify(_model.inputs));
     console.log('[MiniFASNet] outputs:', JSON.stringify(_model.outputs));
@@ -113,29 +107,36 @@ export async function assessMiniFASNetLiveness(
       maxMemoryUsageInMB: 16,
     });
 
-    // RGBA → RGB float32 normalized to [0, 1]
+    // RGBA → BGR float32 normalized to [0, 1]
+    // Model was trained on OpenCV BGR images; swap R and B channels to match.
     const pixels = MINIFASNET_INPUT_SIZE * MINIFASNET_INPUT_SIZE;
     const input = new Float32Array(pixels * 3);
     for (let i = 0; i < pixels; i++) {
-      input[i * 3 + 0] = rgba[i * 4 + 0] / 255.0; // R
+      input[i * 3 + 0] = rgba[i * 4 + 2] / 255.0; // B
       input[i * 3 + 1] = rgba[i * 4 + 1] / 255.0; // G
-      input[i * 3 + 2] = rgba[i * 4 + 2] / 255.0; // B
+      input[i * 3 + 2] = rgba[i * 4 + 0] / 255.0; // R
     }
 
     const outputData = await _model.run([input]);
-    const scores = outputData[0] as Float32Array;
+    const logits = outputData[0] as Float32Array;
 
-    if (!scores || scores.length < MINIFASNET_REAL_IDX + 1) {
-      console.warn(`[MiniFASNet] Unexpected output length: ${scores?.length}`);
+    if (!logits || logits.length < MINIFASNET_REAL_IDX + 1) {
+      console.warn(`[MiniFASNet] Unexpected output length: ${logits?.length}`);
       return { passed: true, realScore: -1 };
     }
 
-    // scores shape: [3] — index 1 = real face probability
-    const realScore = scores[MINIFASNET_REAL_IDX];
+    // Model outputs raw logits (softmax not baked in). Apply softmax to get probabilities.
+    const maxLogit = Math.max(...Array.from(logits));
+    const exps = Array.from(logits).map(x => Math.exp(x - maxLogit));
+    const expSum = exps.reduce((a, b) => a + b, 0);
+    const probs = exps.map(x => x / expSum);
+
+    // index 1 = real face probability
+    const realScore = probs[MINIFASNET_REAL_IDX];
     const passed = realScore >= MINIFASNET_THRESHOLD;
 
     console.log(
-      `[MiniFASNet] scores=[${Array.from(scores).map(s => s.toFixed(3)).join(', ')}] ` +
+      `[MiniFASNet] probs=[${probs.map(p => p.toFixed(3)).join(', ')}] ` +
       `realScore=${realScore.toFixed(3)} threshold=${MINIFASNET_THRESHOLD} → ${passed ? 'PASS' : 'FAIL'}`
     );
 
