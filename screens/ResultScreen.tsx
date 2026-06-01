@@ -25,7 +25,18 @@ export default function ResultScreen({ navigation, route }: Props) {
   };
 
   const handleDone = () => {
-    navigation.navigate('Home');
+    if (success && matchedUser) {
+      navigation.replace('Dashboard', {
+        role: matchedUser.role,
+        matchedUser: {
+          name: matchedUser.name,
+          employeeId: matchedUser.employeeId,
+          position: matchedUser.position,
+        },
+      });
+    } else {
+      navigation.navigate('Home');
+    }
   };
 
   return (

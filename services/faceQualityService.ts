@@ -13,6 +13,38 @@ export type FaceQualityResult = {
   reason?: string;
 };
 
+export type LivenessFaceData = {
+  leftEyeOpenProbability: number;
+  rightEyeOpenProbability: number;
+  headEulerAngleY: number; // rotationY — yaw (left/right)
+  headEulerAngleX: number; // rotationX — pitch (up/down)
+};
+
+/** Raw ML Kit face data without quality filters — used for active liveness checks. */
+export async function detectFaceForLiveness(imagePath: string): Promise<LivenessFaceData | null> {
+  const uri = imagePath.startsWith('file://') ? imagePath : `file://${imagePath}`;
+  try {
+    const faces = await FaceDetection.detect(uri, {
+      performanceMode: 'accurate',
+      classificationMode: 'all',
+      landmarkMode: 'none',
+      contourMode: 'none',
+      minFaceSize: 0.1,
+      trackingEnabled: false,
+    });
+    if (faces.length !== 1) return null;
+    const f = faces[0];
+    return {
+      leftEyeOpenProbability: f.leftEyeOpenProbability ?? 0.5,
+      rightEyeOpenProbability: f.rightEyeOpenProbability ?? 0.5,
+      headEulerAngleY: f.rotationY,
+      headEulerAngleX: f.rotationX,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function assessFaceQuality(imagePath: string): Promise<FaceQualityResult> {
   if (!imagePath || imagePath.trim().length === 0) {
     return { passed: false, reason: 'No image path provided.' };
@@ -59,10 +91,10 @@ export async function assessFaceQuality(imagePath: string): Promise<FaceQualityR
   return {
     passed: true,
     boundingBox: { left, top, width, height },
-    leftEyeOpenProbability:  leftEye,
+    leftEyeOpenProbability: leftEye,
     rightEyeOpenProbability: rightEye,
-    smilingProbability:      (face as any).smilingProbability as number | undefined,
-    headEulerAngleY:         (face as any).headEulerAngleY as number | undefined,
-    headEulerAngleZ:         (face as any).headEulerAngleZ as number | undefined,
+    smilingProbability: (face as any).smilingProbability as number | undefined,
+    headEulerAngleY: face.rotationY,
+    headEulerAngleZ: face.rotationZ,
   };
 }

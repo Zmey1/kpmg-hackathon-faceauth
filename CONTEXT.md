@@ -1,17 +1,18 @@
-# Project Context
+/cle# Project Context
 
 App: React Native (Expo 52) offline face auth. KPMG Hackathon 7.0. Deadline: 05.06.2026.
 Goal: field workers tap button → face scanned → PASS/FAIL. No internet needed. Results sync to AWS later.
 Must integrate into existing "Datalake 3.0" RN app. Model < 20MB, speed < 1 sec, accuracy > 95%.
 
 ## Pipeline (one button tap)
-Photo → ML Kit face detect (fast mode) → passive liveness (eyes+pose) → LBP texture anti-spoof → MobileFaceNet 112×112 → 192-dim embedding → dot product vs stored templates (threshold 0.65) → PASS/FAIL → enqueue to sync queue
+Photo → ML Kit face detect (fast mode) → passive liveness (eyes+pose) → MobileNetV2 liveness (224×224, threshold 0.5) → MobileFaceNet 112×112 → 192-dim embedding → dot product vs stored templates (threshold 0.65) → PASS/FAIL → enqueue to sync queue
 
 ## Anti-Spoofing Status
-- LBP texture entropy (64×64 crop, threshold 4.2) — Phase 2b, catches printed photos fast (~50ms)
-- MiniFASNet V2 TFLite (80×80 crop, realScore threshold 0.6) — Phase 2c, catches screen replay (~70ms)
-  - Model: `assets/models/minifasnet.tflite` (1.7MB float32, from feni-katharotiya/Silent-Face-Anti-Spoofing-TFLite)
-  - Input: [1,80,80,3] NHWC float32 [0,1]; Output: [1,3] softmax, index 1 = real face prob
+- LBP texture entropy (64×64 crop, threshold 4.2) — unreliable, high false-pass rate on screen replays
+- MobileNetV2 liveness TFLite — primary anti-spoof check (based on knottx/flutter_liveness)
+  - Model: `assets/models/mobilenetv2_liveness.tflite`; Input: [1,224,224,3] float32 /255; Output: [1,1] sigmoid
+  - result[0] = liveness probability (1=real, 0=spoof) — inverted vs flutter_liveness reference
+  - `spoofProb = 1 - result[0]`, `passed = spoofProb < 0.5`
   - Service: `services/miniFASNetAntiSpoofService.ts`
 
 ## Services

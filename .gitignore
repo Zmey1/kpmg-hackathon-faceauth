@@ -13,6 +13,7 @@ ios/
 # IDE
 .vscode/
 .idea/
+docs/
 
 # Root-level duplicate model file (canonical copies live in assets/models/)
 mobilefacenet.tflite

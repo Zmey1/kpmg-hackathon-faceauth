@@ -25,6 +25,8 @@ export type RegisteredFaceTemplate = {
 export type RegisteredUser = {
   employeeId: string;
   name: string;
+  role: 'Official' | 'PD';
+  position: string;
   templates: RegisteredFaceTemplate[];
   createdAt: string;
   updatedAt: string;

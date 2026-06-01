@@ -22,11 +22,14 @@ type Props = {
 export default function RegistrationFormScreen({ navigation }: Props) {
   const [employeeId, setEmployeeId] = useState('');
   const [name, setName] = useState('');
+  const [position, setPosition] = useState('');
+  const [role, setRole] = useState<'Official' | 'PD'>('PD');
   const [loading, setLoading] = useState(false);
 
   async function handleContinue() {
-    const trimmedId = employeeId.trim();
+    const trimmedId   = employeeId.trim();
     const trimmedName = name.trim();
+    const trimmedPos  = position.trim();
 
     if (!trimmedId) {
       Alert.alert('Required', 'Please enter an Employee ID.');
@@ -34,6 +37,10 @@ export default function RegistrationFormScreen({ navigation }: Props) {
     }
     if (!trimmedName) {
       Alert.alert('Required', 'Please enter a name.');
+      return;
+    }
+    if (!trimmedPos) {
+      Alert.alert('Required', 'Please enter a position.');
       return;
     }
 
@@ -53,6 +60,8 @@ export default function RegistrationFormScreen({ navigation }: Props) {
                 navigation.navigate('FaceRegistrationCamera', {
                   employeeId: trimmedId,
                   name: trimmedName,
+                  role,
+                  position: trimmedPos,
                 }),
             },
           ]
@@ -61,6 +70,8 @@ export default function RegistrationFormScreen({ navigation }: Props) {
         navigation.navigate('FaceRegistrationCamera', {
           employeeId: trimmedId,
           name: trimmedName,
+          role,
+          position: trimmedPos,
         });
       }
     } finally {
@@ -117,6 +128,49 @@ export default function RegistrationFormScreen({ navigation }: Props) {
                 autoCapitalize="words"
                 autoCorrect={false}
               />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>POSITION</Text>
+              <TextInput
+                style={styles.input}
+                value={position}
+                onChangeText={setPosition}
+                placeholder="e.g. Senior Analyst"
+                placeholderTextColor="#4B5563"
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>ROLE</Text>
+              <View style={styles.roleRow}>
+                <TouchableOpacity
+                  style={[styles.roleBtn, role === 'PD' && styles.roleBtnActive]}
+                  onPress={() => setRole('PD')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.roleBtnText, role === 'PD' && styles.roleBtnTextActive]}>
+                    PD
+                  </Text>
+                  <Text style={[styles.roleSubText, role === 'PD' && styles.roleSubTextActive]}>
+                    Personnel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.roleBtn, role === 'Official' && styles.roleBtnActiveOfficial]}
+                  onPress={() => setRole('Official')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.roleBtnText, role === 'Official' && styles.roleBtnTextActive]}>
+                    Official
+                  </Text>
+                  <Text style={[styles.roleSubText, role === 'Official' && styles.roleSubTextActive]}>
+                    Overseer / Manager
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -196,6 +250,44 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     color: '#FFFFFF',
+  },
+  roleRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  roleBtn: {
+    flex: 1,
+    backgroundColor: '#1A1E2E',
+    borderWidth: 1.5,
+    borderColor: '#252A3A',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 3,
+  },
+  roleBtnActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#1E2A45',
+  },
+  roleBtnActiveOfficial: {
+    borderColor: '#9333EA',
+    backgroundColor: '#1E1432',
+  },
+  roleBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  roleBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  roleSubText: {
+    fontSize: 11,
+    color: '#374151',
+  },
+  roleSubTextActive: {
+    color: '#9CA3AF',
   },
   continueButton: {
     backgroundColor: '#2563EB',

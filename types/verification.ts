@@ -20,5 +20,5 @@ export interface VerificationMetrics {
   livenessResult?: LivenessResult;
   matchScore: number;
   processingMs: number;
-  matchedUser?: { name: string; employeeId: string };
+  matchedUser?: { name: string; employeeId: string; role?: 'Official' | 'PD'; position?: string };
 }

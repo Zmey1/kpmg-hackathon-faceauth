@@ -39,7 +39,12 @@ export default function ResultModal({ metrics }: ResultModalProps) {
         {success && matchedUser ? (
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{matchedUser.name}</Text>
-            <Text style={styles.userEmployeeId}>ID: {matchedUser.employeeId}</Text>
+            {!!matchedUser.employeeId && (
+              <Text style={styles.userEmployeeId}>{matchedUser.employeeId}</Text>
+            )}
+            {!!matchedUser.position && (
+              <Text style={styles.userPosition}>{matchedUser.position}</Text>
+            )}
           </View>
         ) : (
           <Text style={styles.subheadline}>
@@ -145,10 +150,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   userEmployeeId: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    fontWeight: '500',
+  },
+  userPosition: {
     fontSize: 12,
     color: '#6B7280',
     textAlign: 'center',
-    letterSpacing: 0.5,
   },
   divider: {
     height: 1,

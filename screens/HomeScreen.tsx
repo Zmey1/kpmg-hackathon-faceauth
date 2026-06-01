@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -9,22 +9,12 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import StatusCard from '../components/StatusCard';
-import { getPendingSyncCount } from '../services/syncService';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
 };
 
 export default function HomeScreen({ navigation }: Props) {
-  const [pendingSync, setPendingSync] = useState(0);
-
-  useEffect(() => {
-    const refresh = () => getPendingSyncCount().then(setPendingSync);
-    refresh();
-    const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -39,24 +29,10 @@ export default function HomeScreen({ navigation }: Props) {
 
         {/* Title block */}
         <View style={styles.titleBlock}>
-          <Text style={styles.title}>Offline FaceAuth Lite</Text>
+          <Text style={styles.title}>FaceAuth</Text>
           <Text style={styles.subtitle}>
             Secure offline facial authentication{'\n'}for field operations
           </Text>
-        </View>
-
-        {/* System status cards */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SYSTEM STATUS</Text>
-          <View style={styles.cards}>
-            <StatusCard label="Offline Mode"    value="Active"    status="success" />
-            <StatusCard label="Local Templates" value="Ready"     status="success" />
-            <StatusCard
-              label="Sync Queue"
-              value={pendingSync === 0 ? 'Up to date' : `${pendingSync} pending`}
-              status={pendingSync === 0 ? 'success' : 'neutral'}
-            />
-          </View>
         </View>
 
         {/* Primary actions */}
@@ -85,13 +61,6 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.ghostButtonText}>View Registered Users</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.ghostButton}
-            onPress={() => navigation.navigate('Dashboard')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.ghostButtonText}>Attendance Dashboard</Text>
-          </TouchableOpacity>
         </View>
 
         <Text style={styles.footer}>
@@ -147,20 +116,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 23,
-  },
-  section: {
-    marginBottom: 36,
-    gap: 12,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4B5563',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  cards: {
-    gap: 10,
   },
   actions: {
     gap: 12,

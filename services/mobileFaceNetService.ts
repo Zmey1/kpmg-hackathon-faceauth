@@ -22,7 +22,6 @@
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform, Image as RNImage } from 'react-native';
-import { Asset } from 'expo-asset';
 import { loadTensorflowModel } from 'react-native-fast-tflite';
 import type { TensorflowModel } from 'react-native-fast-tflite';
 import { MOBILEFACENET_EMBEDDING_SIZE } from '../constants/model';
@@ -58,22 +57,13 @@ export function initializeMobileFaceNet(): Promise<void> {
 async function _doInit(): Promise<void> {
   console.log('[MobileFaceNet] init start');
   try {
-    console.log('[MobileFaceNet] step 1 — resolving asset');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const asset = Asset.fromModule(require('../assets/models/mobilefacenet.tflite'));
-    console.log('[MobileFaceNet] step 2 — asset.downloaded:', asset.downloaded, 'localUri:', asset.localUri);
-
-    await asset.downloadAsync();
-    console.log('[MobileFaceNet] step 3 — downloadAsync done. localUri:', asset.localUri);
-
-    const modelUri = asset.localUri;
-    if (!modelUri) throw new Error('expo-asset resolved null localUri after downloadAsync');
-
-    console.log('[MobileFaceNet] step 4 — calling loadTensorflowModel, uri:', modelUri);
-    // Use hardware delegate: Core ML on iOS, GPU on Android (falls back internally if unsupported)
+    // Pass require() directly — react-native-fast-tflite resolves bundled assets
+    // via Image.resolveAssetSource(), no expo-asset/downloadAsync needed.
     const delegate = Platform.OS === 'ios' ? 'core-ml' : 'android-gpu';
-    _model = await loadTensorflowModel({ url: modelUri }, delegate);
-    console.log('[MobileFaceNet] step 5 — model loaded');
+    console.log('[MobileFaceNet] loading model via require(), delegate:', delegate);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    _model = await loadTensorflowModel(require('../assets/models/mobilefacenet.tflite'), delegate);
+    console.log('[MobileFaceNet] model loaded');
 
     const inp = _model.inputs[0];
     const out = _model.outputs[0];

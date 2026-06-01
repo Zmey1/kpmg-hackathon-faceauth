@@ -19,7 +19,7 @@ import { CapturedRegistrationSample, RegisteredUser, RegisteredFaceTemplate } fr
 import { assessFaceQuality } from '../services/faceQualityService';
 import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode } from '../services/mobileFaceNetService';
 import { saveRegisteredUser, getRegisteredUser } from '../services/faceTemplateStore';
-import { MOBILEFACENET_MODEL_NAME, MOBILEFACENET_MODEL_VERSION, REGISTRATION_MIN_SAMPLES, REGISTRATION_MAX_SAMPLES, REGISTRATION_STEPS } from '../constants/model';
+import { MOBILEFACENET_MODEL_NAME, MOBILEFACENET_MODEL_VERSION, REGISTRATION_MAX_SAMPLES, REGISTRATION_STEPS } from '../constants/model';
 import CaptureProgress from '../components/CaptureProgress';
 import QualityBadge from '../components/QualityBadge';
 
@@ -33,7 +33,7 @@ type Props = {
 };
 
 export default function FaceRegistrationCameraScreen({ navigation, route }: Props) {
-  const { employeeId, name } = route.params;
+  const { employeeId, name, role, position } = route.params;
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   const isFocused = useIsFocused();
@@ -48,8 +48,7 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
 
   const currentStep = Math.min(samples.length, REGISTRATION_STEPS.length - 1);
   const currentInstruction = REGISTRATION_STEPS[currentStep];
-  const isDone = samples.length >= REGISTRATION_MIN_SAMPLES;
-  const canCaptureMore = samples.length < REGISTRATION_MAX_SAMPLES;
+  const isComplete = samples.length >= REGISTRATION_MAX_SAMPLES;
 
   React.useEffect(() => {
     initializeMobileFaceNet().then(() => {
@@ -81,34 +80,36 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
 
       const embedding = await generateEmbeddingFromImage(imagePath, quality.boundingBox, { width: photo.width, height: photo.height });
 
-      setSamples(prev => [
-        ...prev,
-        {
-          localImagePath: imagePath,
-          embedding,
-          quality,
-          sampleIndex: prev.length,
-          instruction: currentInstruction,
-        },
-      ]);
+      setSamples(prev => {
+        const next = [
+          ...prev,
+          {
+            localImagePath: imagePath,
+            embedding,
+            quality,
+            sampleIndex: prev.length,
+            instruction: currentInstruction,
+          },
+        ];
+        if (next.length >= REGISTRATION_MAX_SAMPLES) {
+          saveRegistration(next);
+        }
+        return next;
+      });
     } catch (err) {
       Alert.alert('Capture Error', String(err));
     } finally {
       setProcessing(false);
     }
-  }, [processing, currentInstruction]);
+  }, [processing, currentInstruction, saveRegistration]);
 
-  const saveRegistration = useCallback(async () => {
-    if (samples.length < REGISTRATION_MIN_SAMPLES) return;
+  const saveRegistration = useCallback(async (samplesToSave: CapturedRegistrationSample[]) => {
+    if (samplesToSave.length < REGISTRATION_MAX_SAMPLES) return;
     setSaving(true);
-
     try {
       const now = new Date().toISOString();
-
-      // Check if overwriting existing user
       const existing = await getRegisteredUser(employeeId);
-
-      const templates: RegisteredFaceTemplate[] = samples.map((s, i) => ({
+      const templates: RegisteredFaceTemplate[] = samplesToSave.map((s, i) => ({
         templateId: `${employeeId}_${Date.now()}_${i}`,
         employeeId,
         name,
@@ -119,43 +120,23 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
         quality: s.quality,
         createdAt: now,
       }));
-
       const user: RegisteredUser = {
         employeeId,
         name,
+        role,
+        position,
         templates,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
-
       await saveRegisteredUser(user);
-
-      Alert.alert(
-        'Registration Complete',
-        [
-          `Employee ID: ${employeeId}`,
-          `Name: ${name}`,
-          `Templates saved: ${templates.length}`,
-          `Model: ${MOBILEFACENET_MODEL_NAME} (${MOBILEFACENET_MODEL_VERSION})`,
-          mockMode ? '\nWARNING: MOCK embeddings — not real recognition.' : '',
-          `Stored: Local (offline)`,
-          `Time: ${now}`,
-        ]
-          .filter(Boolean)
-          .join('\n'),
-        [
-          {
-            text: 'Done',
-            onPress: () => navigation.popToTop(),
-          },
-        ]
-      );
+      navigation.popToTop();
     } catch (err) {
       Alert.alert('Save Error', String(err));
     } finally {
       setSaving(false);
     }
-  }, [samples, employeeId, name, mockMode, navigation]);
+  }, [employeeId, name, role, position, mockMode, navigation]);
 
   if (!hasPermission) {
     return (
@@ -222,11 +203,18 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
         <View style={styles.panel}>
           <CaptureProgress captured={samples.length} />
 
-          {!isDone ? (
+          {saving ? (
+            <View style={[styles.captureButton, styles.buttonBusy]}>
+              <View style={styles.row}>
+                <ActivityIndicator color="#FFF" size="small" />
+                <Text style={styles.captureButtonText}>Saving…</Text>
+              </View>
+            </View>
+          ) : (
             <TouchableOpacity
-              style={[styles.captureButton, (processing || !modelReady) && styles.buttonBusy]}
+              style={[styles.captureButton, (processing || !modelReady || isComplete) && styles.buttonBusy]}
               onPress={captureAndProcess}
-              disabled={processing || !modelReady}
+              disabled={processing || !modelReady || isComplete}
               activeOpacity={0.85}
             >
               {processing ? (
@@ -236,40 +224,10 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
                 </View>
               ) : (
                 <Text style={styles.captureButtonText}>
-                  {modelReady ? 'Capture Sample' : 'Loading model…'}
+                  {!modelReady ? 'Loading model…' : isComplete ? 'All samples captured' : 'Capture Sample'}
                 </Text>
               )}
             </TouchableOpacity>
-          ) : (
-            <View style={styles.doneActions}>
-              {canCaptureMore && (
-                <TouchableOpacity
-                  style={[styles.captureButtonSecondary, processing && styles.buttonBusy]}
-                  onPress={captureAndProcess}
-                  disabled={processing}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.captureButtonSecondaryText}>Add Another Sample</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.saveButton, saving && styles.buttonBusy]}
-                onPress={saveRegistration}
-                disabled={saving}
-                activeOpacity={0.85}
-              >
-                {saving ? (
-                  <View style={styles.row}>
-                    <ActivityIndicator color="#FFF" size="small" />
-                    <Text style={styles.saveButtonText}>Saving…</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.saveButtonText}>
-                    Save Registration ({samples.length} samples)
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
           )}
 
           <TouchableOpacity
@@ -427,37 +385,6 @@ const styles = StyleSheet.create({
   },
   buttonBusy: {
     opacity: 0.6,
-  },
-  doneActions: {
-    gap: 10,
-  },
-  captureButtonSecondary: {
-    borderWidth: 1,
-    borderColor: '#2563EB',
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  captureButtonSecondaryText: {
-    color: '#2563EB',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#16A34A',
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: '#16A34A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  saveButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
   },
   cancelButton: {
     alignItems: 'center',
