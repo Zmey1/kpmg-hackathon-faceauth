@@ -23,7 +23,7 @@ export async function assessFaceQuality(imagePath: string): Promise<FaceQualityR
   let faces: Awaited<ReturnType<typeof FaceDetection.detect>>;
   try {
     faces = await FaceDetection.detect(uri, {
-      performanceMode: 'accurate',
+      performanceMode: 'fast',
       classificationMode: 'all',
       landmarkMode: 'none',
       contourMode: 'none',
