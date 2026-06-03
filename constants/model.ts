@@ -1,14 +1,27 @@
-export const MOBILEFACENET_MODEL_NAME = "MobileFaceNet";
-export const MOBILEFACENET_MODEL_VERSION = "mobilefacenet-tflite-v1";
-export const MOBILEFACENET_MODEL_PATH = "mobilefacenet.tflite";
+// ── Pipeline stage switches ───────────────────────────────────────────────────
+// Set any to false to skip that stage and pass through to the next step.
+export const PIPELINE_QUALITY_CHECK = true;  // ML Kit face detect + eyes-open gate
+export const PIPELINE_FACE_CROP = true;  // crop to face bbox before embedding
+export const PIPELINE_CLAHE = false;  // CLAHE contrast enhancement
+export const PIPELINE_ANTISPOOF = true;  // DeepPixBis liveness check
+export const PIPELINE_LIVENESS = true;  // active head-turn liveness challenges
+
+// ── DeepPixBis anti-spoofing ──────────────────────────────────────────────────
+// Input:  [1, 128, 128, 3] NHWC float32
+// Preprocessing: pixel/255, then (pixel - mean) / std per channel
+// Output: [1, 2] float32 — [spoof_prob, real_prob]; real_prob > 0.5 = real face
+export const DEEPPIXBIS_INPUT_SIZE = 128;
+export const DEEPPIXBIS_THRESHOLD = 0.5;
+
+export const MOBILEFACENET_MODEL_NAME = "EdgeFace";
+export const MOBILEFACENET_MODEL_VERSION = "edgeface-s-gamma05-tflite-v1";
+export const MOBILEFACENET_MODEL_PATH = "edgeface_s_gamma_05.tflite";
 export const MOBILEFACENET_INPUT_SIZE = 112;
 
-// TODO: verify actual output dim of the selected .tflite model.
-// Some MobileFaceNet exports use 128, 192, or 512.
-export const MOBILEFACENET_EMBEDDING_SIZE = 192;
+// EdgeFace-S outputs 512-dim embeddings.
+export const MOBILEFACENET_EMBEDDING_SIZE = 512;
 
-// Calibrated for real mobile camera captures: same-person ~0.65-0.85, different-person ~0.35-0.58.
-// 0.55 was too permissive — raised to 0.65 to reduce false accepts.
+// Calibrated from live tests: same-person ~0.75–0.85, different-person ~0.0–0.1.
 export const MOBILEFACENET_COSINE_THRESHOLD = 0.65;
 
 // LBP texture anti-spoofing — Shannon entropy of 256-bin LBP histogram on 64×64 face crop.
@@ -31,11 +44,11 @@ export const REGISTRATION_STEPS = [
 // ── MiniFASNet V2 anti-spoofing ───────────────────────────────────────────────
 // Input:  [1, 80, 80, 3] NHWC float32 in [0, 1] range
 // Output: [1, 3] softmax — index 1 = real face probability
-export const MINIFASNET_MODEL_PATH   = 'minifasnet.tflite'; // for reference — Metro require() needs a string literal
-export const MINIFASNET_INPUT_SIZE   = 80;
-export const MINIFASNET_REAL_IDX     = 1;
+export const MINIFASNET_MODEL_PATH = 'minifasnet.tflite'; // for reference — Metro require() needs a string literal
+export const MINIFASNET_INPUT_SIZE = 80;
+export const MINIFASNET_REAL_IDX = 1;
 // Lower = more permissive (fewer false-rejects). Raise toward 0.8 for stricter security.
-export const MINIFASNET_THRESHOLD    = 0.75;
+export const MINIFASNET_THRESHOLD = 0.75;
 // Max allowed score for either spoof class (0=print, 2=screen replay).
 // Real faces score ~0.000 on both; screen attacks leak ~0.06+ into class 2.
-export const MINIFASNET_SPOOF_MAX    = 0.05;
+export const MINIFASNET_SPOOF_MAX = 0.05;

@@ -13,19 +13,16 @@ const { width } = Dimensions.get('window');
 const OVAL_WIDTH  = width * 0.68;
 const OVAL_HEIGHT = OVAL_WIDTH * 1.35;
 
-const STATUS_TEXT: Record<VerificationPhase, string> = {
+const STATUS_TEXT: Record<string, string> = {
   aligning: 'Align your face inside the frame',
   quality:  'Checking face quality...',
-  liveness: 'Blink twice',
   matching: 'Matching encrypted template...',
   done:     'Processing complete',
 };
 
-// Oval border color shifts through the pipeline to give live feedback
-const OVAL_COLOR: Record<VerificationPhase, string> = {
+const OVAL_COLOR: Record<string, string> = {
   aligning: '#3B82F6',
   quality:  '#3B82F6',
-  liveness: '#F59E0B',
   matching: '#A855F7',
   done:     '#22C55E',
 };
@@ -39,7 +36,7 @@ export default function CameraOverlay({ phase }: CameraOverlayProps) {
 
   // Pulse the oval during active processing phases
   useEffect(() => {
-    if (phase === 'quality' || phase === 'liveness' || phase === 'matching') {
+    if (phase === 'quality' || phase === 'matching') {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.02, duration: 600, useNativeDriver: true }),
@@ -53,14 +50,14 @@ export default function CameraOverlay({ phase }: CameraOverlayProps) {
     }
   }, [phase, pulseAnim]);
 
-  const borderColor = OVAL_COLOR[phase];
+  const borderColor = OVAL_COLOR[phase] ?? '#3B82F6';
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Top status pill */}
       <View style={styles.topBadge}>
         <View style={[styles.statusDot, { backgroundColor: borderColor }]} />
-        <Text style={styles.statusText}>{STATUS_TEXT[phase]}</Text>
+        <Text style={styles.statusText}>{STATUS_TEXT[phase] ?? phase}</Text>
       </View>
 
       {/* Oval face guide */}

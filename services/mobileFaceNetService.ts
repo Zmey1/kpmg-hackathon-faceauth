@@ -24,7 +24,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform, Image as RNImage } from 'react-native';
 import { loadTensorflowModel } from 'react-native-fast-tflite';
 import type { TensorflowModel } from 'react-native-fast-tflite';
-import { MOBILEFACENET_EMBEDDING_SIZE } from '../constants/model';
+import { MOBILEFACENET_EMBEDDING_SIZE, PIPELINE_CLAHE, PIPELINE_FACE_CROP } from '../constants/model';
 import type { BoundingBox } from './faceQualityService';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -55,34 +55,47 @@ export function initializeMobileFaceNet(): Promise<void> {
 }
 
 async function _doInit(): Promise<void> {
-  console.log('[MobileFaceNet] init start');
+  console.log('[EdgeFace] init start');
   try {
     // Pass require() directly — react-native-fast-tflite resolves bundled assets
     // via Image.resolveAssetSource(), no expo-asset/downloadAsync needed.
-    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'android-gpu';
-    console.log('[MobileFaceNet] loading model via require(), delegate:', delegate);
+    // android-gpu rejects models with ops it doesn't support (common after litert/torch conversion)
+    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'default';
+    console.log('[EdgeFace] loading model via require(), delegate:', delegate);
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _model = await loadTensorflowModel(require('../assets/models/mobilefacenet.tflite'), delegate);
-    console.log('[MobileFaceNet] model loaded');
+    _model = await loadTensorflowModel(require('../assets/models/edgeface_s_gamma_05.tflite'), delegate);
+    console.log('[EdgeFace] model loaded');
 
     const inp = _model.inputs[0];
     const out = _model.outputs[0];
-    console.log('[MobileFaceNet] inputs:', JSON.stringify(_model.inputs));
-    console.log('[MobileFaceNet] outputs:', JSON.stringify(_model.outputs));
+    console.log('[EdgeFace] inputs:', JSON.stringify(_model.inputs));
+    console.log('[EdgeFace] outputs:', JSON.stringify(_model.outputs));
 
     if (inp.shape.length === 4) {
-      _inputH = inp.shape[1];
-      _inputW = inp.shape[2];
+      // Detect NCHW vs NHWC format based on channel position
+      // NCHW: [batch, channels, height, width] — channels (3) is small
+      // NHWC: [batch, height, width, channels] — channels is last
+      if (inp.shape[1] <= 4) {
+        // NCHW format: [1, 3, 112, 112]
+        _inputH = inp.shape[2];
+        _inputW = inp.shape[3];
+        console.log('[EdgeFace] Detected NCHW format');
+      } else {
+        // NHWC format: [1, 112, 112, 3]
+        _inputH = inp.shape[1];
+        _inputW = inp.shape[2];
+        console.log('[EdgeFace] Detected NHWC format');
+      }
     }
     if (out.shape.length === 2) _embeddingSize = out.shape[1];
     else if (out.shape.length === 1) _embeddingSize = out.shape[0];
 
-    console.log(`[MobileFaceNet] Ready — input ${_inputH}x${_inputW}, embedding dim ${_embeddingSize}`);
+    console.log(`[EdgeFace] Ready — input ${_inputH}x${_inputW}, embedding dim ${_embeddingSize}`);
     _useMock = false;
   } catch (err: unknown) {
     const message = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
-    console.error('[MobileFaceNet] INIT FAILED at one of the steps above ↑');
-    console.error('[MobileFaceNet] error:', message);
+    console.error('[EdgeFace] INIT FAILED at one of the steps above ↑');
+    console.error('[EdgeFace] error:', message);
     _useMock = true;
   }
 }
@@ -102,7 +115,7 @@ export async function generateEmbeddingFromImage(
 
     let t = Date.now();
     const manipOps: ImageManipulator.Action[] = [];
-    if (cropBox) {
+    if (PIPELINE_FACE_CROP && cropBox) {
       const { width: imgW, height: imgH } = imageSize ?? await _getImageSize(uri);
       const padX = Math.round(cropBox.width * 0.15);
       const padY = Math.round(cropBox.height * 0.15);
@@ -141,14 +154,27 @@ export async function generateEmbeddingFromImage(
       : _bilinearResize(rgba, width, height, _inputW, _inputH);
 
     t = Date.now();
+    const enhanced = PIPELINE_CLAHE ? _applyCLAHE(resized, _inputW, _inputH) : resized;
+    if (PIPELINE_CLAHE) console.log(`[Timing]   CLAHE: ${Date.now() - t}ms`);
+
+    t = Date.now();
     const numPixels = _inputW * _inputH;
-    const inputBuffer = new Float32Array(numPixels * 3);
-    for (let i = 0; i < numPixels; i++) {
-      inputBuffer[i * 3 + 0] = (resized[i * 4 + 0] - 128) / 128.0;
-      inputBuffer[i * 3 + 1] = (resized[i * 4 + 1] - 128) / 128.0;
-      inputBuffer[i * 3 + 2] = (resized[i * 4 + 2] - 128) / 128.0;
+    const inputBuffer = new Float32Array(3 * numPixels);
+    // Convert RGBA (HWC) to RGB (NCHW) format for EdgeFace model
+    // NCHW layout: [all R values][all G values][all B values]
+    for (let h = 0; h < _inputH; h++) {
+      for (let w = 0; w < _inputW; w++) {
+        const srcIdx = (h * _inputW + w) * 4;  // RGBA source pixel
+        const dstPixel = h * _inputW + w;
+        // Channel 0 (R): indices [0, numPixels)
+        // Channel 1 (G): indices [numPixels, 2*numPixels)
+        // Channel 2 (B): indices [2*numPixels, 3*numPixels)
+        inputBuffer[0 * numPixels + dstPixel] = (enhanced[srcIdx + 0] - 128) / 128.0;
+        inputBuffer[1 * numPixels + dstPixel] = (enhanced[srcIdx + 1] - 128) / 128.0;
+        inputBuffer[2 * numPixels + dstPixel] = (enhanced[srcIdx + 2] - 128) / 128.0;
+      }
     }
-    console.log(`[Timing]   pixelNormalize: ${Date.now() - t}ms`);
+    console.log(`[Timing]   pixelNormalize (NCHW): ${Date.now() - t}ms`);
 
     t = Date.now();
     const [outputTensor] = await _model.run([inputBuffer]);
@@ -156,13 +182,13 @@ export async function generateEmbeddingFromImage(
 
     const rawEmbedding = Array.from(outputTensor as Float32Array);
     if (rawEmbedding.length !== _embeddingSize) {
-      console.warn(`[MobileFaceNet] Output length ${rawEmbedding.length} ≠ expected ${_embeddingSize}.`);
+      console.warn(`[EdgeFace] Output length ${rawEmbedding.length} ≠ expected ${_embeddingSize}.`);
     }
 
     const embedding = l2Normalize(rawEmbedding);
     return embedding;
   } catch (err) {
-    console.warn('[MobileFaceNet] Inference failed, falling back to mock:', err);
+    console.warn('[EdgeFace] Inference failed, falling back to mock:', err);
     return _mockEmbedding(imagePath);
   }
 }
@@ -205,6 +231,97 @@ export function dotProduct(a: FaceEmbedding, b: FaceEmbedding): number {
   let dot = 0;
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
   return dot;
+}
+
+// ─── CLAHE (Contrast Limited Adaptive Histogram Equalization) ────────────────
+// Applied to luminance channel only; RGB is scaled proportionally to preserve hue.
+// Reduces false rejects from harsh sunlight / deep shadows on faces.
+
+function _applyCLAHE(rgba: Uint8Array, width: number, height: number): Uint8Array {
+  const TILE = 8;          // 8×8 pixel tiles → 14×14 grid for 112×112 input
+  const CLIP = 2.5;        // clip limit (higher = more aggressive enhancement)
+  const tilesX = Math.ceil(width / TILE);
+  const tilesY = Math.ceil(height / TILE);
+
+  // Extract per-pixel luminance (BT.601)
+  const luma = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const p = i * 4;
+    luma[i] = Math.round(0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2]);
+  }
+
+  // Compute clipped + equalized CDF for every tile
+  const cdfs: Float32Array[] = new Array(tilesY * tilesX);
+  for (let ty = 0; ty < tilesY; ty++) {
+    for (let tx = 0; tx < tilesX; tx++) {
+      const x0 = tx * TILE, x1 = Math.min(x0 + TILE, width);
+      const y0 = ty * TILE, y1 = Math.min(y0 + TILE, height);
+      const tileArea = (x1 - x0) * (y1 - y0);
+
+      const hist = new Uint32Array(256);
+      for (let y = y0; y < y1; y++)
+        for (let x = x0; x < x1; x++)
+          hist[luma[y * width + x]]++;
+
+      // Clip and redistribute excess
+      const clipCount = Math.max(1, Math.round(CLIP * tileArea / 256));
+      let excess = 0;
+      for (let i = 0; i < 256; i++) {
+        if (hist[i] > clipCount) { excess += hist[i] - clipCount; hist[i] = clipCount; }
+      }
+      const add = Math.floor(excess / 256);
+      const rem = excess - add * 256;
+      for (let i = 0; i < 256; i++) hist[i] += add;
+      for (let i = 0; i < rem; i++) hist[i]++;
+
+      // Build normalized CDF → [0, 1]
+      const cdf = new Float32Array(256);
+      let cumsum = 0, cdfMin = -1;
+      for (let i = 0; i < 256; i++) {
+        cumsum += hist[i];
+        cdf[i] = cumsum;
+        if (cdfMin < 0 && cumsum > 0) cdfMin = cumsum;
+      }
+      const denom = tileArea - (cdfMin > 0 ? cdfMin : 0);
+      for (let i = 0; i < 256; i++)
+        cdf[i] = denom > 0 ? Math.max(0, cdf[i] - (cdfMin > 0 ? cdfMin : 0)) / denom : 0;
+
+      cdfs[ty * tilesX + tx] = cdf;
+    }
+  }
+
+  // Bilinear interpolation between tile CDFs and scale RGB by luma ratio
+  const out = new Uint8Array(rgba.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      const p = idx * 4;
+
+      const tx = (x + 0.5) / TILE - 0.5;
+      const ty = (y + 0.5) / TILE - 0.5;
+      const tx0 = Math.max(0, Math.floor(tx));
+      const ty0 = Math.max(0, Math.floor(ty));
+      const tx1 = Math.min(tilesX - 1, tx0 + 1);
+      const ty1 = Math.min(tilesY - 1, ty0 + 1);
+      const fx = Math.max(0, tx - tx0);
+      const fy = Math.max(0, ty - ty0);
+
+      const v = luma[idx];
+      const mapped =
+        cdfs[ty0 * tilesX + tx0][v] * (1 - fx) * (1 - fy) +
+        cdfs[ty0 * tilesX + tx1][v] *      fx  * (1 - fy) +
+        cdfs[ty1 * tilesX + tx0][v] * (1 - fx) *      fy  +
+        cdfs[ty1 * tilesX + tx1][v] *      fx  *      fy;
+
+      const newLuma = mapped * 255;
+      const ratio = v > 0 ? newLuma / v : 1;
+      out[p]     = Math.min(255, Math.round(rgba[p]     * ratio));
+      out[p + 1] = Math.min(255, Math.round(rgba[p + 1] * ratio));
+      out[p + 2] = Math.min(255, Math.round(rgba[p + 2] * ratio));
+      out[p + 3] = rgba[p + 3];
+    }
+  }
+  return out;
 }
 
 // ─── Bilinear resize (pure JS) ────────────────────────────────────────────────

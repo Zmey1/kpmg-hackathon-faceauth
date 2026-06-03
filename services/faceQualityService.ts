@@ -68,25 +68,28 @@ export async function assessFaceQuality(imagePath: string): Promise<FaceQualityR
   }
 
   if (faces.length === 0) {
+    console.log('[FaceQuality] FAIL — no face detected');
     return { passed: false, reason: 'No face detected. Centre your face in the oval.' };
   }
   if (faces.length > 1) {
+    console.log(`[FaceQuality] FAIL — ${faces.length} faces detected`);
     return { passed: false, reason: 'Multiple faces detected. Ensure only one face is visible.' };
   }
 
   const face = faces[0];
   const { left, top, width, height } = face.frame;
-
   const leftEye = face.leftEyeOpenProbability;
   const rightEye = face.rightEyeOpenProbability;
-  if ((leftEye ?? 0) < 0.5 || (rightEye ?? 0) < 0.5) {
-    return { passed: false, reason: 'Eyes closed — open your eyes and try again.' };
-  }
 
   console.log(
-    `[FaceQuality] face detected bbox=(${left.toFixed(0)},${top.toFixed(0)},${width.toFixed(0)}x${height.toFixed(0)}) ` +
+    `[FaceQuality] detected bbox=(${left.toFixed(0)},${top.toFixed(0)},${width.toFixed(0)}x${height.toFixed(0)}) ` +
     `leftEye=${leftEye?.toFixed(2) ?? 'n/a'} rightEye=${rightEye?.toFixed(2) ?? 'n/a'}`
   );
+
+  if ((leftEye ?? 0) < 0.5 || (rightEye ?? 0) < 0.5) {
+    console.log(`[FaceQuality] FAIL — eyes closed (L=${leftEye?.toFixed(2)} R=${rightEye?.toFixed(2)})`);
+    return { passed: false, reason: 'Eyes closed — open your eyes and try again.' };
+  }
 
   return {
     passed: true,

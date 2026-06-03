@@ -24,7 +24,7 @@ export interface VerificationEventPayload {
   employeeId?:     string;
   matchedName?:    string;
   success:         boolean;
-  livenessPass:    boolean;
+  livenessPass?:   boolean;
   matchScore:      number;
   miniFASNetScore?: number;
   processingMs:    number;

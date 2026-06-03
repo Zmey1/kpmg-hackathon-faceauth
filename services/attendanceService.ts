@@ -5,7 +5,6 @@ export interface AttendanceEvent {
   employeeId:   string;
   matchedName:  string | null;
   success:      boolean;
-  livenessPass: boolean;
   matchScore:   number;
   processingMs: number;
   timestamp:    string;

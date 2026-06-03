@@ -18,14 +18,12 @@ import CameraOverlay from '../components/CameraOverlay';
 import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode, dotProduct } from '../services/mobileFaceNetService';
 import { getAllRegisteredUsers } from '../services/faceTemplateStore';
 import { assessFaceQuality, FaceQualityResult, detectFaceForLiveness } from '../services/faceQualityService';
-// import { assessLiveness } from '../services/livenessService';
-// import { assessTextureLiveness } from '../services/textureAnalysisService';
-// import { initializeMiniFASNet, assessMiniFASNetLiveness } from '../services/miniFASNetAntiSpoofService';
+import { checkLiveness, initializeDeepPixBis } from '../services/deepPixBisService';
 import { RegisteredUser } from '../types/face';
-import { MOBILEFACENET_COSINE_THRESHOLD } from '../constants/model';
+import { MOBILEFACENET_COSINE_THRESHOLD, PIPELINE_QUALITY_CHECK, PIPELINE_ANTISPOOF, PIPELINE_LIVENESS } from '../constants/model';
 import { enqueueSyncItem } from '../services/syncService';
 
-// ─── Interactive liveness helpers ────────────────────────────────────────────
+// ─── Active liveness helpers ──────────────────────────────────────────────────
 
 type LivenessAction = 'turn_left' | 'turn_right' | 'turn_up' | 'turn_down';
 
@@ -45,8 +43,8 @@ function buildLivenessActions(): LivenessAction[] {
   return actions;
 }
 
-const YAW_THRESHOLD = 8; // degrees — left/right (rotationY)
-const PITCH_THRESHOLD = 6.5; // degrees — up/down   (rotationX)
+const YAW_THRESHOLD = 8;   // degrees — left/right (rotationY)
+const PITCH_THRESHOLD = 6.5; // degrees — up/down (rotationX)
 
 async function detectHeadAction(
   camera: Camera,
@@ -56,7 +54,6 @@ async function detectHeadAction(
 ): Promise<boolean> {
   onPrompt(LIVENESS_PROMPTS[action]);
   const deadline = Date.now() + timeoutMs;
-
   while (Date.now() < deadline) {
     try {
       const photo = await camera.takePhoto({ flash: 'off' });
@@ -65,10 +62,10 @@ async function detectHeadAction(
       const yaw = face.headEulerAngleY;
       const pitch = face.headEulerAngleX;
       console.log(`[Liveness] action=${action} yaw=${yaw.toFixed(1)} pitch=${pitch.toFixed(1)}`);
-      if (action === 'turn_left' && yaw < -YAW_THRESHOLD) return true;
-      if (action === 'turn_right' && yaw > YAW_THRESHOLD) return true;
-      if (action === 'turn_up' && pitch > PITCH_THRESHOLD) return true;
-      if (action === 'turn_down' && pitch < -PITCH_THRESHOLD) return true;
+      if (action === 'turn_left'  && yaw < -YAW_THRESHOLD)   return true;
+      if (action === 'turn_right' && yaw >  YAW_THRESHOLD)   return true;
+      if (action === 'turn_up'    && pitch >  PITCH_THRESHOLD) return true;
+      if (action === 'turn_down'  && pitch < -PITCH_THRESHOLD) return true;
     } catch { /* ignore */ }
   }
   return false;
@@ -80,20 +77,18 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Verification'>;
 };
 
-const PHASE_STEP_LABEL: Record<VerificationPhase, string> = {
+const PHASE_LABEL: Record<string, string> = {
   aligning: 'Face Alignment',
   quality: 'Quality Check',
-  liveness: 'Liveness Check',
+  antispoof: 'Spoof Check',
   matching: 'Template Matching',
+  liveness: 'Liveness Check',
   done: 'Complete',
 };
-
 
 export default function VerificationScreen({ navigation }: Props) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
-  // Pick the smallest format that's still at least 1280px wide — enough for a face crop.
-  // Avoids 12MP default which bloats takePhoto, ML Kit, and manipulateAsync times.
   const format = useCameraFormat(device, [{ photoResolution: { width: 1280, height: 960 } }]);
   const isFocused = useIsFocused();
   const cameraRef = useRef<Camera>(null);
@@ -107,7 +102,6 @@ export default function VerificationScreen({ navigation }: Props) {
   const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
   const [livenessInstruction, setLivenessInstruction] = useState('');
 
-  // Ref mirrors isRunning state to avoid stale closures inside the polling effect
   const isRunningRef = useRef(false);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
 
@@ -119,25 +113,21 @@ export default function VerificationScreen({ navigation }: Props) {
   React.useEffect(() => {
     Promise.all([
       initializeMobileFaceNet(),
-      // initializeMiniFASNet(),
+      initializeDeepPixBis(),
       getAllRegisteredUsers(),
-    ]).then(([, users]) => {
+    ]).then(([, , users]) => {
       setModelReady(true);
       setMockMode(isMockMode());
       setRegisteredUsers(users);
     });
   }, []);
 
-  // Holds the latest runVerificationPipeline so the polling closure never goes stale.
-  // Initialized null; populated by the useEffect below (after the callback is declared).
   type PipelineFn = (
     prePhoto?: { path: string; width: number; height: number },
     preQuality?: FaceQualityResult
   ) => Promise<void>;
   const runPipelineRef = useRef<PipelineFn | null>(null);
 
-  // Auto face-detection: take a photo every 1.2 s, run quality check,
-  // trigger full pipeline the moment a good face is seen.
   useEffect(() => {
     if (!modelReady || !isFocused || appState !== 'active' || registeredUsers.length === 0) return;
 
@@ -149,14 +139,23 @@ export default function VerificationScreen({ navigation }: Props) {
           try {
             const photo = await cameraRef.current.takePhoto({ flash: 'off' });
             if (!active) break;
-            const quality = await assessFaceQuality(photo.path);
-            if (!active) break;
 
-            if (quality.passed && !isRunningRef.current) {
-              setFaceStatus('Face detected — verifying…');
-              runPipelineRef.current?.(photo, quality);
-            } else if (!quality.passed) {
-              setFaceStatus(quality.reason ?? 'Position your face in the oval');
+            if (!PIPELINE_QUALITY_CHECK) {
+              if (!isRunningRef.current) {
+                console.log('[Verify] quality check skipped — triggering pipeline');
+                setFaceStatus('Face detected — verifying…');
+                runPipelineRef.current?.(photo, { passed: true });
+              }
+            } else {
+              const quality = await assessFaceQuality(photo.path);
+              if (!active) break;
+              if (quality.passed && !isRunningRef.current) {
+                console.log('[Verify] face detected — triggering pipeline');
+                setFaceStatus('Face detected — verifying…');
+                runPipelineRef.current?.(photo, quality);
+              } else if (!quality.passed) {
+                setFaceStatus(quality.reason ?? 'Position your face in the oval');
+              }
             }
           } catch {
             // silent — camera not ready or screen unfocused
@@ -180,10 +179,8 @@ export default function VerificationScreen({ navigation }: Props) {
     const startTime = Date.now();
 
     try {
-      // ─── PHASE 1: Quality check ──────────────────────────────────────────
+      // ── Quality check ──────────────────────────────────────────────────────
       setPhase('quality');
-      let t = Date.now();
-
       let photo: { path: string; width: number; height: number };
       let quality: FaceQualityResult;
 
@@ -192,27 +189,46 @@ export default function VerificationScreen({ navigation }: Props) {
         quality = preQuality;
       } else {
         const captured = await cameraRef.current.takePhoto({ flash: 'off' });
-        console.log(`[Timing] takePhoto: ${Date.now() - t}ms`);
         photo = captured;
-        t = Date.now();
-        quality = await assessFaceQuality(captured.path);
-        console.log(`[Timing] assessFaceQuality: ${Date.now() - t}ms`);
-        if (!quality.passed) {
+        if (PIPELINE_QUALITY_CHECK) {
+          quality = await assessFaceQuality(captured.path);
+          if (!quality.passed) {
+            setPhase('aligning');
+            setIsRunning(false);
+            return;
+          }
+        } else {
+          quality = { passed: true };
+        }
+      }
+
+      // ── Anti-spoof ─────────────────────────────────────────────────────────
+      if (PIPELINE_ANTISPOOF) {
+        setPhase('antispoof');
+        const spoofResult = await checkLiveness(
+          photo.path,
+          quality.boundingBox,
+          { width: photo.width, height: photo.height },
+        );
+        if (!spoofResult.passed) {
+          console.log(`[Verify] spoof detected — score=${spoofResult.score.toFixed(4)}`);
+          setFaceStatus('Spoof detected — use your real face');
           setPhase('aligning');
           setIsRunning(false);
+          isRunningRef.current = false;
           return;
         }
       }
 
-      // ── PHASE 2 (disabled): Passive liveness + anti-spoofing ────────────
-      // assessLiveness, assessTextureLiveness, assessMiniFASNetLiveness removed
-      // ────────────────────────────────────────────────────────────────────
-
-      // ─── PHASE 3: Embedding + template match ────────────────────────────
+      // ── Embedding + template match ─────────────────────────────────────────
       setPhase('matching');
-      t = Date.now();
-      const embedding = await generateEmbeddingFromImage(photo.path, quality.boundingBox, { width: photo.width, height: photo.height });
-      console.log(`[Timing] generateEmbedding: ${Date.now() - t}ms`);
+      let t = Date.now();
+      const embedding = await generateEmbeddingFromImage(
+        photo.path,
+        quality.boundingBox,
+        { width: photo.width, height: photo.height },
+      );
+      console.log(`[Verify] embedding generated in ${Date.now() - t}ms, dim=${embedding.length}, sample=[${embedding.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
 
       t = Date.now();
       let bestScore = -1;
@@ -221,21 +237,21 @@ export default function VerificationScreen({ navigation }: Props) {
         for (const template of user.templates) {
           try {
             const score = dotProduct(embedding, template.embedding);
+            console.log(`[Verify] user=${user.name} templateDim=${template.embedding.length} score=${score.toFixed(4)}`);
             if (score > bestScore) {
               bestScore = score;
               matchedUser = user;
               if (score >= MOBILEFACENET_COSINE_THRESHOLD) break outer;
             }
-          } catch {
-            // dimension mismatch from a different model version — skip
+          } catch (e) {
+            console.warn('[Verify] dotProduct failed (dim mismatch?):', e);
           }
         }
       }
-      console.log(`[Timing] templateMatch: ${Date.now() - t}ms`);
+      console.log(`[Verify] match scan ${Date.now() - t}ms — bestScore=${bestScore.toFixed(4)} threshold=${MOBILEFACENET_COSINE_THRESHOLD} → ${bestScore >= MOBILEFACENET_COSINE_THRESHOLD ? 'MATCH' : 'NO MATCH'} (${matchedUser?.name ?? 'none'})`);
 
       const finalScore = Math.max(0, bestScore);
       const faceMatched = registeredUsers.length > 0 && finalScore >= MOBILEFACENET_COSINE_THRESHOLD;
-      console.log(`[Verify] bestScore=${finalScore.toFixed(4)} → ${faceMatched ? 'MATCH' : 'NO MATCH'}`);
 
       if (!faceMatched) {
         enqueueSyncItem({
@@ -249,30 +265,31 @@ export default function VerificationScreen({ navigation }: Props) {
             processingMs: Date.now() - startTime,
             timestamp: new Date().toISOString(),
           },
-        }).catch(err => console.warn('[Verify] Failed to enqueue sync item:', err));
+        }).catch(err => console.warn('[Verify] enqueue failed:', err));
         setPhase('done');
         setIsRunning(false);
         navigation.replace('Result', {
           success: false,
-          livenessPass: false,
           matchScore: finalScore,
           processingMs: Date.now() - startTime,
         });
         return;
       }
 
-      // ─── PHASE 4: Interactive liveness ──────────────────────────────────
-      setPhase('liveness');
-      setLivenessInstruction('');
-      const livenessActions = buildLivenessActions();
+      // ── Active liveness ────────────────────────────────────────────────────
       let livenessPass = true;
-      for (const action of livenessActions) {
-        const ok = await detectHeadAction(cameraRef.current!, action, setLivenessInstruction);
-        if (!ok) { livenessPass = false; break; }
+      if (PIPELINE_LIVENESS) {
+        setPhase('liveness');
+        setLivenessInstruction('');
+        const livenessActions = buildLivenessActions();
+        for (const action of livenessActions) {
+          const ok = await detectHeadAction(cameraRef.current!, action, setLivenessInstruction);
+          if (!ok) { livenessPass = false; break; }
+        }
+        console.log(`[Verify] liveness=${livenessPass ? 'PASS' : 'FAIL (timeout)'}`);
       }
 
       const processingMs = Date.now() - startTime;
-      console.log(`[Verify] liveness=${livenessPass ? 'PASS' : 'FAIL (timeout)'}`);
 
       enqueueSyncItem({
         type: 'VERIFICATION_EVENT',
@@ -285,13 +302,12 @@ export default function VerificationScreen({ navigation }: Props) {
           processingMs,
           timestamp: new Date().toISOString(),
         },
-      }).catch(err => console.warn('[Verify] Failed to enqueue sync item:', err));
+      }).catch(err => console.warn('[Verify] enqueue failed:', err));
 
       setPhase('done');
       setIsRunning(false);
       navigation.replace('Result', {
         success: livenessPass,
-        livenessPass,
         matchScore: finalScore,
         processingMs,
         matchedUser: livenessPass && matchedUser
@@ -311,10 +327,8 @@ export default function VerificationScreen({ navigation }: Props) {
     }
   }, [isRunning, registeredUsers, navigation]);
 
-  // Sync ref to always point at the latest pipeline function.
   useEffect(() => { runPipelineRef.current = runVerificationPipeline; }, [runVerificationPipeline]);
 
-  // ── Permission denied ──────────────────────────────────────────────────────
   if (!hasPermission) {
     return (
       <SafeAreaView style={styles.centeredScreen}>
@@ -336,7 +350,6 @@ export default function VerificationScreen({ navigation }: Props) {
     );
   }
 
-  // ── No front camera found ─────────────────────────────────────────────────
   if (!device) {
     return (
       <SafeAreaView style={styles.centeredScreen}>
@@ -354,7 +367,6 @@ export default function VerificationScreen({ navigation }: Props) {
     );
   }
 
-  // ── No registered users ───────────────────────────────────────────────────
   if (modelReady && registeredUsers.length === 0) {
     return (
       <SafeAreaView style={styles.centeredScreen}>
@@ -383,7 +395,6 @@ export default function VerificationScreen({ navigation }: Props) {
         photo
       />
 
-      {/* Mock badge */}
       {mockMode && (
         <SafeAreaView style={styles.mockBadgeContainer} pointerEvents="none">
           <View style={styles.mockBadge}>
@@ -401,7 +412,9 @@ export default function VerificationScreen({ navigation }: Props) {
               <View style={styles.statusRow}>
                 <ActivityIndicator color="#2563EB" size="small" />
                 <Text style={styles.statusText}>
-                  {phase === 'liveness' && livenessInstruction ? livenessInstruction : `${PHASE_STEP_LABEL[phase]}…`}
+                  {phase === 'liveness' && livenessInstruction
+                    ? livenessInstruction
+                    : `${PHASE_LABEL[phase] ?? phase}…`}
                 </Text>
               </View>
             ) : !modelReady ? (

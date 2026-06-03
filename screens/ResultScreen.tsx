@@ -18,7 +18,7 @@ type Props = {
 };
 
 export default function ResultScreen({ navigation, route }: Props) {
-  const { success, livenessPass, matchScore, processingMs, matchedUser } = route.params;
+  const { success, matchScore, processingMs, matchedUser } = route.params;
 
   const handleRetry = () => {
     navigation.replace('Verification');
@@ -48,7 +48,7 @@ export default function ResultScreen({ navigation, route }: Props) {
         <Text style={styles.screenTitle}>Verification Result</Text>
 
         <ResultModal
-          metrics={{ success, livenessPass, matchScore, processingMs, matchedUser }}
+          metrics={{ success, matchScore, processingMs, matchedUser }}
         />
 
         <View style={styles.actions}>

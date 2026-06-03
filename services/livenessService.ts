@@ -17,7 +17,14 @@
  * mid-range devices without requiring any depth sensor.
  */
 
-import { LivenessResult } from '../types/verification';
+interface LivenessResult {
+  passed: boolean;
+  reason?: string;
+  eyeScore: number;
+  smilingProbability: number;
+  headYaw: number;
+  headRoll: number;
+}
 
 // ─── Thresholds ───────────────────────────────────────────────────────────────
 

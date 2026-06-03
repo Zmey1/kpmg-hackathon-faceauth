@@ -18,8 +18,9 @@ import { RootStackParamList } from '../types/navigation';
 import { CapturedRegistrationSample, RegisteredUser, RegisteredFaceTemplate } from '../types/face';
 import { assessFaceQuality } from '../services/faceQualityService';
 import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode } from '../services/mobileFaceNetService';
+import { checkLiveness, initializeDeepPixBis } from '../services/deepPixBisService';
 import { saveRegisteredUser, getRegisteredUser } from '../services/faceTemplateStore';
-import { MOBILEFACENET_MODEL_NAME, MOBILEFACENET_MODEL_VERSION, REGISTRATION_MAX_SAMPLES, REGISTRATION_STEPS } from '../constants/model';
+import { MOBILEFACENET_MODEL_NAME, MOBILEFACENET_MODEL_VERSION, REGISTRATION_MAX_SAMPLES, REGISTRATION_STEPS, PIPELINE_ANTISPOOF } from '../constants/model';
 import CaptureProgress from '../components/CaptureProgress';
 import QualityBadge from '../components/QualityBadge';
 
@@ -51,57 +52,11 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
   const isComplete = samples.length >= REGISTRATION_MAX_SAMPLES;
 
   React.useEffect(() => {
-    initializeMobileFaceNet().then(() => {
+    Promise.all([initializeMobileFaceNet(), initializeDeepPixBis()]).then(() => {
       setModelReady(true);
       setMockMode(isMockMode());
     });
   }, []);
-
-  const captureAndProcess = useCallback(async () => {
-    if (!cameraRef.current || processing) return;
-    setProcessing(true);
-    setLastQuality(null);
-
-    try {
-      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
-      const imagePath = photo.path;
-
-      const quality = await assessFaceQuality(imagePath);
-      setLastQuality(quality);
-
-      if (!quality.passed) {
-        Alert.alert(
-          'Quality Check Failed',
-          quality.reason ?? 'Please adjust position and try again.',
-          [{ text: 'Retake' }]
-        );
-        return;
-      }
-
-      const embedding = await generateEmbeddingFromImage(imagePath, quality.boundingBox, { width: photo.width, height: photo.height });
-
-      setSamples(prev => {
-        const next = [
-          ...prev,
-          {
-            localImagePath: imagePath,
-            embedding,
-            quality,
-            sampleIndex: prev.length,
-            instruction: currentInstruction,
-          },
-        ];
-        if (next.length >= REGISTRATION_MAX_SAMPLES) {
-          saveRegistration(next);
-        }
-        return next;
-      });
-    } catch (err) {
-      Alert.alert('Capture Error', String(err));
-    } finally {
-      setProcessing(false);
-    }
-  }, [processing, currentInstruction, saveRegistration]);
 
   const saveRegistration = useCallback(async (samplesToSave: CapturedRegistrationSample[]) => {
     if (samplesToSave.length < REGISTRATION_MAX_SAMPLES) return;
@@ -137,6 +92,62 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
       setSaving(false);
     }
   }, [employeeId, name, role, position, mockMode, navigation]);
+
+  const captureAndProcess = useCallback(async () => {
+    if (!cameraRef.current || processing) return;
+    setProcessing(true);
+    setLastQuality(null);
+
+    try {
+      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
+      const imagePath = photo.path;
+
+      const quality = await assessFaceQuality(imagePath);
+      setLastQuality(quality);
+
+      if (!quality.passed) {
+        Alert.alert(
+          'Quality Check Failed',
+          quality.reason ?? 'Please adjust position and try again.',
+          [{ text: 'Retake' }]
+        );
+        return;
+      }
+
+      if (PIPELINE_ANTISPOOF) {
+        const spoofResult = await checkLiveness(imagePath, quality.boundingBox, { width: photo.width, height: photo.height });
+        if (!spoofResult.passed) {
+          console.log(`[Register] spoof detected — score=${spoofResult.score.toFixed(4)}`);
+          Alert.alert('Spoof Detected', 'Use your real face — printed photos and screens are not allowed.', [{ text: 'Retake' }]);
+          return;
+        }
+      }
+
+      const embedding = await generateEmbeddingFromImage(imagePath, quality.boundingBox, { width: photo.width, height: photo.height });
+      console.log(`[Register] sample ${samples.length + 1} embedding dim=${embedding.length} sample=[${embedding.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
+
+      setSamples(prev => {
+        const next = [
+          ...prev,
+          {
+            localImagePath: imagePath,
+            embedding,
+            quality,
+            sampleIndex: prev.length,
+            instruction: currentInstruction,
+          },
+        ];
+        if (next.length >= REGISTRATION_MAX_SAMPLES) {
+          saveRegistration(next);
+        }
+        return next;
+      });
+    } catch (err) {
+      Alert.alert('Capture Error', String(err));
+    } finally {
+      setProcessing(false);
+    }
+  }, [processing, currentInstruction, saveRegistration]);
 
   if (!hasPermission) {
     return (

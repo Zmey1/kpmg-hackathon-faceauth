@@ -19,7 +19,7 @@
  */
 export const AWS_CONFIG = {
   // MOCK — physical device on same network as laptop
-  apiEndpoint: 'http://172.19.40.195:3001',
+  apiEndpoint: 'http://10.136.2.195:3001',
 
   // MOCK — Android emulator (comment out the line above, use this instead)
   // apiEndpoint: 'http://10.0.2.2:3001',

@@ -24,7 +24,7 @@ function MetricRow({ label, value, highlight }: MetricRowProps) {
 }
 
 export default function ResultModal({ metrics }: ResultModalProps) {
-  const { success, livenessPass, matchScore, processingMs, matchedUser } = metrics;
+  const { success, matchScore, processingMs, matchedUser } = metrics;
 
   return (
     <View style={[styles.card, success ? styles.cardSuccess : styles.cardFailure]}>
@@ -60,11 +60,6 @@ export default function ResultModal({ metrics }: ResultModalProps) {
 
       {/* Metrics grid */}
       <View style={styles.metrics}>
-        <MetricRow
-          label="Liveness Check"
-          value={livenessPass ? 'Passed' : 'Failed'}
-          highlight={livenessPass}
-        />
         <MetricRow
           label="Match Score"
           value={matchScore.toFixed(2)}
