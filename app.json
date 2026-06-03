@@ -11,8 +11,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.faceauth.lite",
+      "deploymentTarget": "15.1",
       "infoPlist": {
-        "NSCameraUsageDescription": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device."
+        "NSCameraUsageDescription": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device.",
+        "NSPhotoLibraryUsageDescription": "FaceAuth Lite may save verification photos for audit purposes.",
+        "UIBackgroundModes": ["fetch", "processing"]
       }
     },
     "android": {
@@ -34,6 +37,11 @@
       ],
       "expo-font"
     ],
-    "newArchEnabled": true
+    "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "1c1e38e1-87af-452e-8c67-351d731f6b34"
+      }
+    }
   }
 }
