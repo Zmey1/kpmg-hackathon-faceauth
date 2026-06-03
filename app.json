@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.faceauth.lite",
-      "deploymentTarget": "15.1",
+      "deploymentTarget": "16.0",
       "infoPlist": {
         "NSCameraUsageDescription": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device.",
         "NSPhotoLibraryUsageDescription": "FaceAuth Lite may save verification photos for audit purposes.",
