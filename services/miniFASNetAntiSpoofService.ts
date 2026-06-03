@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 import { loadTensorflowModel } from 'react-native-fast-tflite';
-import type { TensorflowModel } from 'react-native-fast-tflite';
+import type { TensorflowModel, TensorflowModelDelegate } from 'react-native-fast-tflite';
 import type { BoundingBox } from './faceQualityService';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -34,12 +34,26 @@ export function initializeMiniFASNet(): Promise<void> {
 async function _doInit(): Promise<void> {
   console.log('[Liveness] init start');
   try {
-    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'default';
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _model = await loadTensorflowModel(
-      require('../assets/models/mobilenetv2_liveness.tflite'),
-      delegate,
-    );
+    // iOS: try core-ml first, fall back to default if CoreML not available
+    const delegates: TensorflowModelDelegate[] = Platform.OS === 'ios' ? ['core-ml', 'default'] : ['default'];
+    let loadError: unknown;
+    for (const delegate of delegates) {
+      try {
+        console.log('[Liveness] loading model, delegate:', delegate);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        _model = await loadTensorflowModel(
+          require('../assets/models/mobilenetv2_liveness.tflite'),
+          delegate,
+        );
+        console.log('[Liveness] model loaded with delegate:', delegate);
+        break;
+      } catch (e) {
+        console.warn(`[Liveness] failed with delegate ${delegate}:`, e);
+        loadError = e;
+        _model = null;
+      }
+    }
+    if (!_model) throw loadError;
     console.log('[Liveness] inputs:', JSON.stringify(_model.inputs));
     console.log('[Liveness] outputs:', JSON.stringify(_model.outputs));
     console.log('[Liveness] Ready — MobileNetV2 224×224');

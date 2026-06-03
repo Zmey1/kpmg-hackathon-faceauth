@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 import { loadTensorflowModel } from 'react-native-fast-tflite';
-import type { TensorflowModel } from 'react-native-fast-tflite';
+import type { TensorflowModel, TensorflowModelDelegate } from 'react-native-fast-tflite';
 import { DEEPPIXBIS_INPUT_SIZE, DEEPPIXBIS_THRESHOLD } from '../constants/model';
 import type { BoundingBox } from './faceQualityService';
 
@@ -34,12 +34,26 @@ export function initializeDeepPixBis(): Promise<void> {
 async function _doInit(): Promise<void> {
   console.log('[DeepPixBis] init start');
   try {
-    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'default';
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _model = await loadTensorflowModel(
-      require('../assets/models/mn3_antispoof_celeba.tflite'),
-      delegate,
-    );
+    // iOS: try core-ml first, fall back to default if CoreML not available
+    const delegates: TensorflowModelDelegate[] = Platform.OS === 'ios' ? ['core-ml', 'default'] : ['default'];
+    let loadError: unknown;
+    for (const delegate of delegates) {
+      try {
+        console.log('[DeepPixBis] loading model, delegate:', delegate);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        _model = await loadTensorflowModel(
+          require('../assets/models/mn3_antispoof_celeba.tflite'),
+          delegate,
+        );
+        console.log('[DeepPixBis] model loaded with delegate:', delegate);
+        break;
+      } catch (e) {
+        console.warn(`[DeepPixBis] failed with delegate ${delegate}:`, e);
+        loadError = e;
+        _model = null;
+      }
+    }
+    if (!_model) throw loadError;
     console.log('[DeepPixBis] inputs:', JSON.stringify(_model.inputs));
     console.log('[DeepPixBis] outputs:', JSON.stringify(_model.outputs));
     console.log(`[AntiSpoof] Ready — ${DEEPPIXBIS_INPUT_SIZE}×${DEEPPIXBIS_INPUT_SIZE} NHWC`);

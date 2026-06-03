@@ -23,7 +23,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform, Image as RNImage } from 'react-native';
 import { loadTensorflowModel } from 'react-native-fast-tflite';
-import type { TensorflowModel } from 'react-native-fast-tflite';
+import type { TensorflowModel, TensorflowModelDelegate } from 'react-native-fast-tflite';
 import { MOBILEFACENET_EMBEDDING_SIZE, PIPELINE_CLAHE, PIPELINE_FACE_CROP } from '../constants/model';
 import type { BoundingBox } from './faceQualityService';
 
@@ -60,11 +60,23 @@ async function _doInit(): Promise<void> {
     // Pass require() directly — react-native-fast-tflite resolves bundled assets
     // via Image.resolveAssetSource(), no expo-asset/downloadAsync needed.
     // android-gpu rejects models with ops it doesn't support (common after litert/torch conversion)
-    const delegate = Platform.OS === 'ios' ? 'core-ml' : 'default';
-    console.log('[EdgeFace] loading model via require(), delegate:', delegate);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _model = await loadTensorflowModel(require('../assets/models/edgeface_s_gamma_05.tflite'), delegate);
-    console.log('[EdgeFace] model loaded');
+    // iOS: try core-ml first, fall back to default if CoreML not available or model incompatible
+    const delegates: TensorflowModelDelegate[] = Platform.OS === 'ios' ? ['core-ml', 'default'] : ['default'];
+    let loadError: unknown;
+    for (const delegate of delegates) {
+      try {
+        console.log('[EdgeFace] loading model via require(), delegate:', delegate);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        _model = await loadTensorflowModel(require('../assets/models/edgeface_s_gamma_05.tflite'), delegate);
+        console.log('[EdgeFace] model loaded with delegate:', delegate);
+        break;
+      } catch (e) {
+        console.warn(`[EdgeFace] failed with delegate ${delegate}:`, e);
+        loadError = e;
+        _model = null;
+      }
+    }
+    if (!_model) throw loadError;
 
     const inp = _model.inputs[0];
     const out = _model.outputs[0];

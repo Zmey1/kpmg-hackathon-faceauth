@@ -28,7 +28,7 @@ jobs:
       - name: Generate iOS native project
         run: npx expo prebuild --platform ios --clean
 
-      - name: Set iOS deployment target
+      - name: Set iOS deployment target and enable CoreML
         run: |
           # Update Podfile.properties.json with correct deployment target
           cat > ios/Podfile.properties.json << 'EOF'
@@ -38,6 +38,9 @@ jobs:
             "ios.deploymentTarget": "16.0"
           }
           EOF
+
+          # Enable CoreML delegate for TFLite - prepend to Podfile (must be at top)
+          echo '$EnableCoreMLDelegate = true' | cat - ios/Podfile > ios/Podfile.tmp && mv ios/Podfile.tmp ios/Podfile
 
       - name: Install Pods
         run: |
