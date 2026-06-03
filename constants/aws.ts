@@ -18,14 +18,14 @@
  *   See docs for Lambda + API Gateway setup.
  */
 export const AWS_CONFIG = {
+  // PRODUCTION — AWS API Gateway
+  apiEndpoint: 'https://92daub1977.execute-api.ap-south-1.amazonaws.com/prod',
+
   // MOCK — physical device on same network as laptop
-  apiEndpoint: 'http://10.136.2.195:3001',
+  // apiEndpoint: 'http://10.136.2.195:3001',
 
-  // MOCK — Android emulator (comment out the line above, use this instead)
+  // MOCK — Android emulator
   // apiEndpoint: 'http://10.0.2.2:3001',
-
-  // PRODUCTION — replace with real API Gateway URL before demo
-  // apiEndpoint: 'https://YOUR_API_GATEWAY_URL/prod',
 
   syncPath:       '/sync',
   attendancePath: '/attendance',

@@ -20,7 +20,9 @@ const CORS = {
 
 exports.handler = async (event) => {
   const method = event.requestContext?.http?.method ?? event.httpMethod;
-  const path   = event.requestContext?.http?.path   ?? event.path;
+  let path = event.requestContext?.http?.path ?? event.path;
+  // Strip stage prefix (e.g., /prod/sync -> /sync)
+  path = path.replace(/^\/prod/, '');
 
   if (method === 'OPTIONS') {
     return { statusCode: 204, headers: CORS, body: '' };
