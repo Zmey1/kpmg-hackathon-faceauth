@@ -28,6 +28,17 @@ jobs:
       - name: Generate iOS native project
         run: npx expo prebuild --platform ios --clean
 
+      - name: Set iOS deployment target
+        run: |
+          # Update Podfile.properties.json with correct deployment target
+          cat > ios/Podfile.properties.json << 'EOF'
+          {
+            "expo.jsEngine": "hermes",
+            "newArchEnabled": "true",
+            "ios.deploymentTarget": "16.0"
+          }
+          EOF
+
       - name: Install Pods
         run: |
           cd ios
