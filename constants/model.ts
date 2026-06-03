@@ -3,7 +3,7 @@
 export const PIPELINE_QUALITY_CHECK = true;  // ML Kit face detect + eyes-open gate
 export const PIPELINE_FACE_CROP = true;  // crop to face bbox before embedding
 export const PIPELINE_CLAHE = false;  // CLAHE contrast enhancement
-export const PIPELINE_ANTISPOOF = true;  // DeepPixBis liveness check
+export const PIPELINE_ANTISPOOF = false;  // DeepPixBis liveness check
 export const PIPELINE_LIVENESS = true;  // active head-turn liveness challenges
 
 // ── DeepPixBis anti-spoofing ──────────────────────────────────────────────────
