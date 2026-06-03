@@ -1,0 +1,59 @@
+diff --git a/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m b/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m
+index 87fd4ff..71140cf 100644
+--- a/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m
++++ b/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m
+@@ -239,10 +239,50 @@ RCT_EXPORT_METHOD(detect: (nonnull NSString*)url
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ {
+-    NSURL *_url = [NSURL URLWithString:url];
+-    NSData *imageData = [NSData dataWithContentsOfURL:_url];
+-    UIImage *image = [UIImage imageWithData:imageData];
+-    MLKVisionImage *visionImage = [[MLKVisionImage alloc] initWithImage:image];
++    UIImage *image = nil;
++
++    // Handle file:// URLs and local paths properly
++    if ([url hasPrefix:@"file://"] || [url hasPrefix:@"/"]) {
++        NSString *path = url;
++        if ([url hasPrefix:@"file://"]) {
++            // Remove file:// prefix and decode percent encoding
++            path = [[NSURL URLWithString:url] path];
++            if (path == nil) {
++                // Fallback: manually strip file:// prefix
++                path = [url substringFromIndex:7];
++            }
++        }
++        // Use imageWithContentsOfFile which correctly handles EXIF orientation
++        image = [UIImage imageWithContentsOfFile:path];
++    } else {
++        // Remote URL - use the original approach
++        NSURL *_url = [NSURL URLWithString:url];
++        NSData *imageData = [NSData dataWithContentsOfURL:_url];
++        image = [UIImage imageWithData:imageData];
++    }
++
++    if (image == nil) {
++        reject(@"Face Detection", [NSString stringWithFormat:@"Failed to load image from: %@", url], nil);
++        return;
++    }
++
++    // Normalize image orientation - physically rotate pixels so ML Kit gets upright image
++    // This is critical for iOS camera photos which have EXIF orientation metadata
++    UIImage *normalizedImage = image;
++    if (image.imageOrientation != UIImageOrientationUp) {
++        UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
++        [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
++        normalizedImage = UIGraphicsGetImageFromCurrentImageContext();
++        UIGraphicsEndImageContext();
++    }
++
++    if (normalizedImage == nil) {
++        reject(@"Face Detection", @"Failed to normalize image orientation", nil);
++        return;
++    }
++
++    MLKVisionImage *visionImage = [[MLKVisionImage alloc] initWithImage:normalizedImage];
++    visionImage.orientation = UIImageOrientationUp;
+     MLKFaceDetectorOptions *options = [self getOptions:optionsDict];
+     MLKFaceDetector *faceDetector = [MLKFaceDetector faceDetectorWithOptions:options];
+     [faceDetector processImage:visionImage
