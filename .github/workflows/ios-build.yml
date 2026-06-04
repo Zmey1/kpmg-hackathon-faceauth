@@ -19,7 +19,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Apply patches
         run: npx patch-package
@@ -49,6 +49,11 @@ jobs:
         run: |
           cd ios
           pod install
+          # Patch fmt base.h for Xcode 16+ (Apple clang 21) consteval bug
+          FMT_BASE=Pods/fmt/include/fmt/base.h
+          if [ -f "$FMT_BASE" ]; then
+            sed -i '' 's/#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L/#elif defined(__apple_build_version__) \&\& (__apple_build_version__ < 14000029L || __apple_build_version__ >= 16000000L)/' "$FMT_BASE" || true
+          fi
 
       - name: Build unsigned .app
         run: |
