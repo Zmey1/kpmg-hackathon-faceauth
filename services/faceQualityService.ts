@@ -55,14 +55,14 @@ export async function assessFaceQuality(imagePath: string): Promise<FaceQualityR
   let faces: Awaited<ReturnType<typeof FaceDetection.detect>>;
   try {
     faces = await FaceDetection.detect(uri, {
-      performanceMode: 'fast',
+      performanceMode: 'accurate',
       classificationMode: 'all',
       landmarkMode: 'none',
       contourMode: 'none',
-      minFaceSize: 0.1,
+      minFaceSize: 0.05,
       trackingEnabled: false,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.warn('[FaceQuality] ML Kit detection failed:', err);
     return { passed: false, reason: 'Face detection failed.' };
   }
