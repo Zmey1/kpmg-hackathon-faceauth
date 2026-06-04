@@ -17,8 +17,8 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import { CapturedRegistrationSample, RegisteredUser, RegisteredFaceTemplate } from '../types/face';
 import { assessFaceQuality } from '../services/faceQualityService';
-import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode } from '../services/mobileFaceNetService';
-import { checkLiveness, initializeDeepPixBis } from '../services/deepPixBisService';
+import { generateEmbeddingFromImage, initializeEdgeFace, isMockMode } from '../services/edgeFaceService';
+import { checkAntiSpoof, initializeAntiSpoof } from '../services/antiSpoofService';
 import { saveRegisteredUser, getRegisteredUser } from '../services/faceTemplateStore';
 import { MOBILEFACENET_MODEL_NAME, MOBILEFACENET_MODEL_VERSION, REGISTRATION_MAX_SAMPLES, REGISTRATION_STEPS, PIPELINE_ANTISPOOF } from '../constants/model';
 import CaptureProgress from '../components/CaptureProgress';
@@ -52,7 +52,7 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
   const isComplete = samples.length >= REGISTRATION_MAX_SAMPLES;
 
   React.useEffect(() => {
-    Promise.all([initializeMobileFaceNet(), initializeDeepPixBis()]).then(() => {
+    Promise.all([initializeEdgeFace(), initializeAntiSpoof()]).then(() => {
       setModelReady(true);
       setMockMode(isMockMode());
     });
@@ -115,7 +115,7 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
       }
 
       if (PIPELINE_ANTISPOOF) {
-        const spoofResult = await checkLiveness(imagePath, quality.boundingBox, { width: photo.width, height: photo.height });
+        const spoofResult = await checkAntiSpoof(imagePath, quality.boundingBox, { width: photo.width, height: photo.height });
         if (!spoofResult.passed) {
           console.log(`[Register] spoof detected — score=${spoofResult.score.toFixed(4)}`);
           Alert.alert('Spoof Detected', 'Use your real face — printed photos and screens are not allowed.', [{ text: 'Retake' }]);

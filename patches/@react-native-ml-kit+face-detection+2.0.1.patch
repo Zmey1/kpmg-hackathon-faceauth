@@ -1,32 +1,15 @@
 diff --git a/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m b/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m
-index 87fd4ff..0e6bb61 100644
+index 87fd4ff..6fc82b0 100644
 --- a/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m
 +++ b/node_modules/@react-native-ml-kit/face-detection/ios/FaceDetection.m
-@@ -8,6 +8,17 @@ @implementation FaceDetection
- 
- RCT_EXPORT_MODULE()
- 
-+// Redraws the image into a new bitmap with UIImageOrientationUp so ML Kit
-+// receives correctly-rotated pixels regardless of EXIF orientation.
-+- (UIImage *)normalizedImage:(UIImage *)image {
-+    if (image.imageOrientation == UIImageOrientationUp) return image;
-+    UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
-+    [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
-+    UIImage *normalized = UIGraphicsGetImageFromCurrentImageContext();
-+    UIGraphicsEndImageContext();
-+    return normalized ?: image;
-+}
-+
- - (MLKFaceDetectorOptions*)getOptions: (NSDictionary*)dict {
-     MLKFaceDetectorOptions* options = [[MLKFaceDetectorOptions alloc] init];
-     if ([dict[@"performanceMode"] isEqual:@"accurate"]) {
-@@ -239,10 +250,40 @@ - (NSDictionary*)faceToDict: (MLKFace*)face
+@@ -239,10 +239,39 @@ RCT_EXPORT_METHOD(detect: (nonnull NSString*)url
                    resolver:(RCTPromiseResolveBlock)resolve
                    rejecter:(RCTPromiseRejectBlock)reject)
  {
 -    NSURL *_url = [NSURL URLWithString:url];
 -    NSData *imageData = [NSData dataWithContentsOfURL:_url];
 -    UIImage *image = [UIImage imageWithData:imageData];
+-    MLKVisionImage *visionImage = [[MLKVisionImage alloc] initWithImage:image];
 +    UIImage *image = nil;
 +
 +    // Handle file:// URLs and local paths properly for iOS
@@ -55,12 +38,9 @@ index 87fd4ff..0e6bb61 100644
 +        return;
 +    }
 +
-+    // Normalize pixel orientation so ML Kit sees an upright face regardless of EXIF.
-+    // Front camera photos on iOS are stored landscape with rotation metadata;
-+    // ML Kit's orientation hint alone is not reliable enough across all devices.
-+    image = [self normalizedImage:image];
-     MLKVisionImage *visionImage = [[MLKVisionImage alloc] initWithImage:image];
-+    visionImage.orientation = image.imageOrientation; // will be Up after normalization
++    // Per ML Kit docs: set orientation so ML Kit interprets pixels correctly.
++    MLKVisionImage *visionImage = [[MLKVisionImage alloc] initWithImage:image];
++    visionImage.orientation = image.imageOrientation;
      MLKFaceDetectorOptions *options = [self getOptions:optionsDict];
      MLKFaceDetector *faceDetector = [MLKFaceDetector faceDetectorWithOptions:options];
      [faceDetector processImage:visionImage

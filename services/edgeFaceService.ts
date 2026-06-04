@@ -1,9 +1,9 @@
 /**
- * MobileFaceNet embedding service.
+ * EdgeFace embedding service.
  *
  * Runtime: react-native-fast-tflite v2 (JSI bindings, no nitro-modules,
  * compatible with Kotlin 1.9.25 / Expo 52).
- * Model: mobilefacenet.tflite — original float32 weights (accuracy preserved).
+ * Model: edgeface_s_gamma_05.tflite — EdgeFace-S gamma=0.5 (accuracy preserved).
  * Delegate: Core ML (iOS) / android-gpu (Android) for hardware acceleration.
  *
  * Preprocessing pipeline:
@@ -48,7 +48,7 @@ let _useMock = false;
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
-export function initializeMobileFaceNet(): Promise<void> {
+export function initializeEdgeFace(): Promise<void> {
   if (_initPromise) return _initPromise;
   _initPromise = _doInit();
   return _initPromise;
@@ -119,7 +119,7 @@ export async function generateEmbeddingFromImage(
   cropBox?: BoundingBox,
   imageSize?: { width: number; height: number }
 ): Promise<FaceEmbedding> {
-  await initializeMobileFaceNet();
+  await initializeEdgeFace();
   if (_useMock || !_model) return _mockEmbedding(imagePath);
 
   try {

@@ -4,7 +4,7 @@
  * No liveness detection in this module — that is a separate concern.
  */
 
-import { generateEmbeddingFromImage, dotProduct } from './mobileFaceNetService';
+import { generateEmbeddingFromImage, dotProduct } from './edgeFaceService';
 import { getRegisteredUser } from './faceTemplateStore';
 import { MOBILEFACENET_COSINE_THRESHOLD } from '../constants/model';
 

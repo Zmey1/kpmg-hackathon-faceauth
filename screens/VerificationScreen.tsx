@@ -15,10 +15,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { VerificationPhase } from '../types/verification';
 import CameraOverlay from '../components/CameraOverlay';
-import { generateEmbeddingFromImage, initializeMobileFaceNet, isMockMode, dotProduct } from '../services/mobileFaceNetService';
+import { generateEmbeddingFromImage, initializeEdgeFace, isMockMode, dotProduct } from '../services/edgeFaceService';
 import { getAllRegisteredUsers } from '../services/faceTemplateStore';
 import { assessFaceQuality, FaceQualityResult, detectFaceForLiveness } from '../services/faceQualityService';
-import { checkLiveness, initializeDeepPixBis } from '../services/deepPixBisService';
+import { checkAntiSpoof, initializeAntiSpoof } from '../services/antiSpoofService';
 import { RegisteredUser } from '../types/face';
 import { MOBILEFACENET_COSINE_THRESHOLD, PIPELINE_QUALITY_CHECK, PIPELINE_ANTISPOOF, PIPELINE_LIVENESS } from '../constants/model';
 import { enqueueSyncItem } from '../services/syncService';
@@ -112,8 +112,8 @@ export default function VerificationScreen({ navigation }: Props) {
 
   React.useEffect(() => {
     Promise.all([
-      initializeMobileFaceNet(),
-      initializeDeepPixBis(),
+      initializeEdgeFace(),
+      initializeAntiSpoof(),
       getAllRegisteredUsers(),
     ]).then(([, , users]) => {
       setModelReady(true);
@@ -205,7 +205,7 @@ export default function VerificationScreen({ navigation }: Props) {
       // ── Anti-spoof ─────────────────────────────────────────────────────────
       if (PIPELINE_ANTISPOOF) {
         setPhase('antispoof');
-        const spoofResult = await checkLiveness(
+        const spoofResult = await checkAntiSpoof(
           photo.path,
           quality.boundingBox,
           { width: photo.width, height: photo.height },
