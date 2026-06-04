@@ -61,6 +61,14 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.ghostButtonText}>View Registered Users</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.ghostButton}
+            onPress={() => navigation.navigate('AdminLogin')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ghostButtonText}>Admin Login</Text>
+          </TouchableOpacity>
+
         </View>
 
         <Text style={styles.footer}>

@@ -13,8 +13,12 @@ export type RootStackParamList = {
     name: string;
     role: 'Official' | 'PD';
     position: string;
+    organisationCategory: string;
+    organisationName: string;
+    isKP?: boolean;
   };
   RegisteredUsers: undefined;
+  AdminLogin: undefined;
   Dashboard: {
     role?: 'Official' | 'PD';
     matchedUser?: { name: string; employeeId: string; position: string };

@@ -16,53 +16,53 @@ export type Project = {
 const MOCK_PROJECTS: Project[] = [
   {
     id: 'P001',
-    name: 'Digital Transformation Initiative',
-    upc: 'DTI-2024-001',
+    name: 'Delhi–Mumbai Expressway (Pkg-7)',
+    upc: 'NH-148N/PKG-07',
     currentKP: [
-      { employeeId: 'OFF-001', name: 'Sarah Mitchell', position: 'Senior Manager' },
-      { employeeId: 'OFF-002', name: 'James Chen', position: 'Director' },
+      { employeeId: 'KP-001', name: 'Rajesh Kumar', position: 'Team Leader' },
+      { employeeId: 'KP-002', name: 'Anil Verma', position: 'Resident Engineer' },
     ],
     previousKP: [
-      { employeeId: 'OFF-005', name: 'Priya Sharma', position: 'Manager' },
+      { employeeId: 'KP-005', name: 'Priya Sharma', position: 'Senior Pavement Specialist' },
     ],
-    memberIds: ['EMP-001', 'EMP-002', 'EMP-003'],
+    memberIds: ['KP-001', 'KP-002', 'KP-005'],
   },
   {
     id: 'P002',
-    name: 'Risk & Compliance Framework',
-    upc: 'RCF-2025-002',
+    name: 'Ganga Expressway (Section II)',
+    upc: 'UPEIDA/GE-02',
     currentKP: [
-      { employeeId: 'OFF-003', name: 'Arjun Nair', position: 'Associate Director' },
+      { employeeId: 'KP-003', name: 'Suresh Reddy', position: 'Bridge Engineer' },
     ],
     previousKP: [
-      { employeeId: 'OFF-006', name: 'Emily Watson', position: 'Senior Manager' },
-      { employeeId: 'OFF-007', name: 'Ravi Kumar', position: 'Director' },
+      { employeeId: 'KP-006', name: 'Kavita Iyer', position: 'Senior Quality and Material Expert' },
+      { employeeId: 'KP-007', name: 'Ramesh Patel', position: 'Resident Engineer' },
     ],
-    memberIds: ['EMP-004', 'EMP-005'],
+    memberIds: ['KP-003', 'KP-006', 'KP-007'],
   },
   {
     id: 'P003',
-    name: 'Cloud Migration Program',
-    upc: 'CMP-2025-003',
+    name: 'Bengaluru–Chennai Expressway (Pkg-3)',
+    upc: 'NH-71/PKG-03',
     currentKP: [
-      { employeeId: 'OFF-004', name: 'Lisa Fernandez', position: 'Partner' },
-      { employeeId: 'OFF-008', name: 'David Park', position: 'Senior Manager' },
-      { employeeId: 'OFF-009', name: 'Neha Gupta', position: 'Manager' },
+      { employeeId: 'KP-004', name: 'Vikram Singh', position: 'Sr. Geotech Expert' },
+      { employeeId: 'KP-008', name: 'Deepak Joshi', position: 'Tunnel Design Engineer' },
+      { employeeId: 'KP-009', name: 'Neha Gupta', position: 'Tunnel Safety Expert' },
     ],
     previousKP: [],
-    memberIds: ['EMP-006', 'EMP-007', 'EMP-008', 'EMP-009'],
+    memberIds: ['KP-004', 'KP-008', 'KP-009'],
   },
   {
     id: 'P004',
-    name: 'Data Analytics Platform',
-    upc: 'DAP-2024-004',
+    name: 'Dwarka Expressway (Phase IV)',
+    upc: 'NH-248BB/PH-04',
     currentKP: [
-      { employeeId: 'OFF-002', name: 'James Chen', position: 'Director' },
+      { employeeId: 'KP-002', name: 'Anil Verma', position: 'Resident Engineer' },
     ],
     previousKP: [
-      { employeeId: 'OFF-010', name: 'Aisha Malik', position: 'Manager' },
+      { employeeId: 'KP-010', name: 'Sunita Rao', position: 'Team Leader' },
     ],
-    memberIds: ['EMP-010', 'EMP-011'],
+    memberIds: ['KP-002', 'KP-010'],
   },
 ];
 

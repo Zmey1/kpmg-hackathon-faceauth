@@ -27,6 +27,9 @@ export type RegisteredUser = {
   name: string;
   role: 'Official' | 'PD';
   position: string;
+  organisationCategory: string;
+  organisationName: string;
+  isKP?: boolean;
   templates: RegisteredFaceTemplate[];
   createdAt: string;
   updatedAt: string;
