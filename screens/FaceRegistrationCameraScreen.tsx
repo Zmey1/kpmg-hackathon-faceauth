@@ -34,7 +34,7 @@ type Props = {
 };
 
 export default function FaceRegistrationCameraScreen({ navigation, route }: Props) {
-  const { employeeId, name, role, position, organisationCategory, organisationName, isKP } = route.params;
+  const { employeeId, name, password, role, position, organisationCategory, organisationName, isKP } = route.params;
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   const isFocused = useIsFocused();
@@ -78,6 +78,7 @@ export default function FaceRegistrationCameraScreen({ navigation, route }: Prop
       const user: RegisteredUser = {
         employeeId,
         name,
+        password,
         role,
         position,
         organisationCategory,

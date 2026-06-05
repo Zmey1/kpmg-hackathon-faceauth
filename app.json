@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FaceAuth Lite",
-    "slug": "faceauth-lite",
+    "name": "UPAS",
+    "slug": "upas",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -10,16 +10,16 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.faceauth.lite",
+      "bundleIdentifier": "com.upas.app",
       "deploymentTarget": "16.0",
       "infoPlist": {
-        "NSCameraUsageDescription": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device.",
-        "NSPhotoLibraryUsageDescription": "FaceAuth Lite may save verification photos for audit purposes.",
+        "NSCameraUsageDescription": "UPAS uses your front camera for offline facial authentication. All processing stays on-device.",
+        "NSPhotoLibraryUsageDescription": "UPAS may save verification photos for audit purposes.",
         "UIBackgroundModes": ["fetch", "processing"]
       }
     },
     "android": {
-      "package": "com.faceauth.lite",
+      "package": "com.upas.app",
       "adaptiveIcon": {
         "backgroundColor": "#0F1117"
       },
@@ -32,7 +32,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "FaceAuth Lite uses your front camera for offline facial authentication. All processing stays on-device."
+          "cameraPermissionText": "UPAS uses your front camera for offline facial authentication. All processing stays on-device."
         }
       ],
       "expo-font"

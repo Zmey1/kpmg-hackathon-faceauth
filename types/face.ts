@@ -25,6 +25,7 @@ export type RegisteredFaceTemplate = {
 export type RegisteredUser = {
   employeeId: string;
   name: string;
+  password: string;
   role: 'Official' | 'PD';
   position: string;
   organisationCategory: string;

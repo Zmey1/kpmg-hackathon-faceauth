@@ -55,7 +55,6 @@ export function initializeEdgeFace(): Promise<void> {
 }
 
 async function _doInit(): Promise<void> {
-  console.log('[EdgeFace] init start');
   try {
     // Pass require() directly — react-native-fast-tflite resolves bundled assets
     // via Image.resolveAssetSource(), no expo-asset/downloadAsync needed.
@@ -63,15 +62,15 @@ async function _doInit(): Promise<void> {
     // iOS: try core-ml first, fall back to default if CoreML not available or model incompatible
     const delegates: TensorflowModelDelegate[] = Platform.OS === 'ios' ? ['core-ml', 'default'] : ['default'];
     let loadError: unknown;
+    let usedDelegate: TensorflowModelDelegate | null = null;
     for (const delegate of delegates) {
       try {
-        console.log('[EdgeFace] loading model via require(), delegate:', delegate);
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         _model = await loadTensorflowModel(require('../assets/models/edgeface_s_gamma_05.tflite'), delegate);
-        console.log('[EdgeFace] model loaded with delegate:', delegate);
+        usedDelegate = delegate;
         break;
       } catch (e) {
-        console.warn(`[EdgeFace] failed with delegate ${delegate}:`, e);
+        console.warn(`[EdgeFace] delegate ${delegate} unavailable, trying next…`);
         loadError = e;
         _model = null;
       }
@@ -80,8 +79,6 @@ async function _doInit(): Promise<void> {
 
     const inp = _model.inputs[0];
     const out = _model.outputs[0];
-    console.log('[EdgeFace] inputs:', JSON.stringify(_model.inputs));
-    console.log('[EdgeFace] outputs:', JSON.stringify(_model.outputs));
 
     if (inp.shape.length === 4) {
       // Detect NCHW vs NHWC format based on channel position
@@ -91,22 +88,20 @@ async function _doInit(): Promise<void> {
         // NCHW format: [1, 3, 112, 112]
         _inputH = inp.shape[2];
         _inputW = inp.shape[3];
-        console.log('[EdgeFace] Detected NCHW format');
       } else {
         // NHWC format: [1, 112, 112, 3]
         _inputH = inp.shape[1];
         _inputW = inp.shape[2];
-        console.log('[EdgeFace] Detected NHWC format');
       }
     }
     if (out.shape.length === 2) _embeddingSize = out.shape[1];
     else if (out.shape.length === 1) _embeddingSize = out.shape[0];
 
-    console.log(`[EdgeFace] Ready — input ${_inputH}x${_inputW}, embedding dim ${_embeddingSize}`);
+    console.log(`[EdgeFace] Ready — ${_inputH}x${_inputW} input, ${_embeddingSize}-dim embeddings (delegate: ${usedDelegate})`);
     _useMock = false;
   } catch (err: unknown) {
     const message = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
-    console.error('[EdgeFace] INIT FAILED at one of the steps above ↑');
+    console.error('[EdgeFace] Init failed — falling back to mock mode');
     console.error('[EdgeFace] error:', message);
     _useMock = true;
   }
@@ -143,13 +138,13 @@ export async function generateEmbeddingFromImage(
       manipOps,
       { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
     );
-    console.log(`[Timing]   manipulateAsync (crop+resize): ${Date.now() - t}ms`);
+    const tCrop = Date.now() - t;
 
     t = Date.now();
     const b64 = await FileSystem.readAsStringAsync(processed.uri, {
       encoding: FileSystem.EncodingType.Base64,
     });
-    console.log(`[Timing]   readAsStringAsync (base64): ${Date.now() - t}ms`);
+    const tRead = Date.now() - t;
 
     t = Date.now();
     const binaryStr = atob(b64);
@@ -159,7 +154,7 @@ export async function generateEmbeddingFromImage(
       useTArray: true,
       maxMemoryUsageInMB: 64,
     });
-    console.log(`[Timing]   atob+jpegDecode: ${Date.now() - t}ms`);
+    const tDecode = Date.now() - t;
 
     const resized = (width === _inputW && height === _inputH)
       ? rgba
@@ -167,7 +162,6 @@ export async function generateEmbeddingFromImage(
 
     t = Date.now();
     const enhanced = PIPELINE_CLAHE ? _applyCLAHE(resized, _inputW, _inputH) : resized;
-    if (PIPELINE_CLAHE) console.log(`[Timing]   CLAHE: ${Date.now() - t}ms`);
 
     t = Date.now();
     const numPixels = _inputW * _inputH;
@@ -186,11 +180,12 @@ export async function generateEmbeddingFromImage(
         inputBuffer[2 * numPixels + dstPixel] = (enhanced[srcIdx + 2] - 128) / 128.0;
       }
     }
-    console.log(`[Timing]   pixelNormalize (NCHW): ${Date.now() - t}ms`);
+    const tNorm = Date.now() - t;
 
     t = Date.now();
     const [outputTensor] = await _model.run([inputBuffer]);
-    console.log(`[Timing]   tfliteInference: ${Date.now() - t}ms`);
+    const tInfer = Date.now() - t;
+    console.log(`[EdgeFace] Inference — crop: ${tCrop}ms, decode: ${tDecode}ms, normalize: ${tNorm}ms, tflite: ${tInfer}ms`);
 
     const rawEmbedding = Array.from(outputTensor as Float32Array);
     if (rawEmbedding.length !== _embeddingSize) {

@@ -10,7 +10,7 @@ import {
   AppStateStatus,
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission, useCameraFormat } from 'react-native-vision-camera';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { VerificationPhase } from '../types/verification';
@@ -50,18 +50,20 @@ async function detectHeadAction(
   camera: Camera,
   action: LivenessAction,
   onPrompt: (s: string) => void,
+  abort: React.MutableRefObject<boolean>,
   timeoutMs = 12000,
 ): Promise<boolean> {
   onPrompt(LIVENESS_PROMPTS[action]);
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && !abort.current) {
     try {
       const photo = await camera.takePhoto({ flash: 'off' });
+      if (abort.current) return false;
       const face = await detectFaceForLiveness(photo.path);
       if (!face) continue;
       const yaw = face.headEulerAngleY;
       const pitch = face.headEulerAngleX;
-      console.log(`[Liveness] action=${action} yaw=${yaw.toFixed(1)} pitch=${pitch.toFixed(1)}`);
+      // per-frame yaw/pitch intentionally not logged — see pipeline summary
       if (action === 'turn_left'  && yaw < -YAW_THRESHOLD)   return true;
       if (action === 'turn_right' && yaw >  YAW_THRESHOLD)   return true;
       if (action === 'turn_up'    && pitch >  PITCH_THRESHOLD) return true;
@@ -75,6 +77,7 @@ async function detectHeadAction(
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Verification'>;
+  route: RouteProp<RootStackParamList, 'Verification'>;
 };
 
 const PHASE_LABEL: Record<string, string> = {
@@ -86,7 +89,8 @@ const PHASE_LABEL: Record<string, string> = {
   done: 'Complete',
 };
 
-export default function VerificationScreen({ navigation }: Props) {
+export default function VerificationScreen({ navigation, route }: Props) {
+  const eventType = route.params?.eventType ?? 'check-in';
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   const format = useCameraFormat(device, [{ photoResolution: { width: 1280, height: 960 } }]);
@@ -104,6 +108,19 @@ export default function VerificationScreen({ navigation }: Props) {
 
   const isRunningRef = useRef(false);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+
+  const abortRef = useRef(false);
+  useEffect(() => {
+    const onBlur = () => {
+      abortRef.current = true;
+      isRunningRef.current = false;
+      setIsRunning(false);
+    };
+    const onFocus = () => { abortRef.current = false; };
+    const unsubBlur = navigation.addListener('blur', onBlur);
+    const unsubFocus = navigation.addListener('focus', onFocus);
+    return () => { unsubBlur(); unsubFocus(); };
+  }, [navigation]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', setAppState);
@@ -134,15 +151,15 @@ export default function VerificationScreen({ navigation }: Props) {
     let active = true;
 
     async function poll() {
-      while (active) {
+      while (active && !abortRef.current) {
         if (!isRunningRef.current && cameraRef.current) {
           try {
             const photo = await cameraRef.current.takePhoto({ flash: 'off' });
-            if (!active) break;
+            if (!active || abortRef.current) break;
 
             if (!PIPELINE_QUALITY_CHECK) {
               if (!isRunningRef.current) {
-                console.log('[Verify] quality check skipped — triggering pipeline');
+                console.log('[FaceAuth] Quality check skipped — starting pipeline');
                 setFaceStatus('Face detected — verifying…');
                 runPipelineRef.current?.(photo, { passed: true });
               }
@@ -150,7 +167,7 @@ export default function VerificationScreen({ navigation }: Props) {
               const quality = await assessFaceQuality(photo.path);
               if (!active) break;
               if (quality.passed && !isRunningRef.current) {
-                console.log('[Verify] face detected — triggering pipeline');
+                console.log('[FaceAuth] Face quality OK — starting pipeline');
                 setFaceStatus('Face detected — verifying…');
                 runPipelineRef.current?.(photo, quality);
               } else if (!quality.passed) {
@@ -183,6 +200,7 @@ export default function VerificationScreen({ navigation }: Props) {
       setPhase('quality');
       let photo: { path: string; width: number; height: number };
       let quality: FaceQualityResult;
+      const tDetect = Date.now();
 
       if (prePhoto && preQuality) {
         photo = prePhoto;
@@ -201,6 +219,7 @@ export default function VerificationScreen({ navigation }: Props) {
           quality = { passed: true };
         }
       }
+      const detectMs = Date.now() - tDetect;
 
       // ── Anti-spoof ─────────────────────────────────────────────────────────
       if (PIPELINE_ANTISPOOF) {
@@ -211,7 +230,7 @@ export default function VerificationScreen({ navigation }: Props) {
           { width: photo.width, height: photo.height },
         );
         if (!spoofResult.passed) {
-          console.log(`[Verify] spoof detected — score=${spoofResult.score.toFixed(4)}`);
+          console.log(`[FaceAuth] SPOOF DETECTED — score=${spoofResult.score.toFixed(3)}`);
           setFaceStatus('Spoof detected — use your real face');
           setPhase('aligning');
           setIsRunning(false);
@@ -222,38 +241,44 @@ export default function VerificationScreen({ navigation }: Props) {
 
       // ── Embedding + template match ─────────────────────────────────────────
       setPhase('matching');
-      let t = Date.now();
+      const tVerify = Date.now();
       const embedding = await generateEmbeddingFromImage(
         photo.path,
         quality.boundingBox,
         { width: photo.width, height: photo.height },
       );
-      console.log(`[Verify] embedding generated in ${Date.now() - t}ms, dim=${embedding.length}, sample=[${embedding.slice(0, 4).map(v => v.toFixed(3)).join(', ')}]`);
 
-      t = Date.now();
       let bestScore = -1;
       let matchedUser: RegisteredUser | null = null;
       outer: for (const user of registeredUsers) {
         for (const template of user.templates) {
           try {
             const score = dotProduct(embedding, template.embedding);
-            console.log(`[Verify] user=${user.name} templateDim=${template.embedding.length} score=${score.toFixed(4)}`);
             if (score > bestScore) {
               bestScore = score;
               matchedUser = user;
               if (score >= MOBILEFACENET_COSINE_THRESHOLD) break outer;
             }
           } catch (e) {
-            console.warn('[Verify] dotProduct failed (dim mismatch?):', e);
+            console.warn('[FaceAuth] dotProduct failed (dim mismatch?):', e);
           }
         }
       }
-      console.log(`[Verify] match scan ${Date.now() - t}ms — bestScore=${bestScore.toFixed(4)} threshold=${MOBILEFACENET_COSINE_THRESHOLD} → ${bestScore >= MOBILEFACENET_COSINE_THRESHOLD ? 'MATCH' : 'NO MATCH'} (${matchedUser?.name ?? 'none'})`);
+      const verifyMs = Date.now() - tVerify;
 
       const finalScore = Math.max(0, bestScore);
       const faceMatched = registeredUsers.length > 0 && finalScore >= MOBILEFACENET_COSINE_THRESHOLD;
 
       if (!faceMatched) {
+        const totalMs = Date.now() - startTime;
+        console.log([
+          '[FaceAuth] Pipeline summary:',
+          `  Face detection : ${detectMs}ms`,
+          `  Verification   : ${verifyMs}ms  (embedding + match)`,
+          `  Total          : ${totalMs}ms`,
+          `  Match          : NO MATCH — best score ${finalScore.toFixed(3)} < threshold ${MOBILEFACENET_COSINE_THRESHOLD}`,
+          `  Result         : FAIL`,
+        ].join('\n'));
         enqueueSyncItem({
           type: 'VERIFICATION_EVENT',
           payload: {
@@ -262,34 +287,48 @@ export default function VerificationScreen({ navigation }: Props) {
             success: false,
             livenessPass: false,
             matchScore: finalScore,
-            processingMs: Date.now() - startTime,
+            processingMs: totalMs,
             timestamp: new Date().toISOString(),
+            eventType,
           },
-        }).catch(err => console.warn('[Verify] enqueue failed:', err));
+        }).catch(err => console.warn('[FaceAuth] enqueue failed:', err));
         setPhase('done');
         setIsRunning(false);
         navigation.replace('Result', {
           success: false,
           matchScore: finalScore,
-          processingMs: Date.now() - startTime,
+          processingMs: totalMs,
+          eventType,
         });
         return;
       }
 
       // ── Active liveness ────────────────────────────────────────────────────
       let livenessPass = true;
+      let livenessMs = 0;
       if (PIPELINE_LIVENESS) {
         setPhase('liveness');
         setLivenessInstruction('');
+        const tLiveness = Date.now();
         const livenessActions = buildLivenessActions();
         for (const action of livenessActions) {
-          const ok = await detectHeadAction(cameraRef.current!, action, setLivenessInstruction);
-          if (!ok) { livenessPass = false; break; }
+          const ok = await detectHeadAction(cameraRef.current!, action, setLivenessInstruction, abortRef);
+          if (!ok || abortRef.current) { livenessPass = false; break; }
         }
-        console.log(`[Verify] liveness=${livenessPass ? 'PASS' : 'FAIL (timeout)'}`);
+        livenessMs = Date.now() - tLiveness;
       }
 
       const processingMs = Date.now() - startTime;
+
+      console.log([
+        '[FaceAuth] Pipeline summary:',
+        `  Face detection : ${detectMs}ms`,
+        `  Verification   : ${verifyMs}ms  (embedding + match, score=${finalScore.toFixed(3)})`,
+        PIPELINE_LIVENESS ? `  Liveness       : ${livenessMs}ms  (${livenessPass ? 'PASS' : 'FAIL — timeout'})` : '  Liveness       : disabled',
+        `  Total          : ${processingMs}ms`,
+        `  Match          : ${matchedUser?.name ?? 'none'} (score=${finalScore.toFixed(3)} threshold=${MOBILEFACENET_COSINE_THRESHOLD})`,
+        `  Result         : ${livenessPass ? 'PASS' : 'FAIL'}`,
+      ].join('\n'));
 
       enqueueSyncItem({
         type: 'VERIFICATION_EVENT',
@@ -301,8 +340,9 @@ export default function VerificationScreen({ navigation }: Props) {
           matchScore: finalScore,
           processingMs,
           timestamp: new Date().toISOString(),
+          eventType,
         },
-      }).catch(err => console.warn('[Verify] enqueue failed:', err));
+      }).catch(err => console.warn('[FaceAuth] enqueue failed:', err));
 
       setPhase('done');
       setIsRunning(false);
@@ -318,10 +358,11 @@ export default function VerificationScreen({ navigation }: Props) {
             position: matchedUser.position ?? 'Employee',
           }
           : undefined,
+        eventType,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
-      console.error('[Verify] pipeline error:', msg);
+      console.error('[FaceAuth] Pipeline error:', msg);
       setPhase('aligning');
       setIsRunning(false);
     }

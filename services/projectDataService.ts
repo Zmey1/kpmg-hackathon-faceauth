@@ -80,3 +80,13 @@ export function getProjectsForOfficial(employeeId: string): Project[] {
     p.previousKP.some(kp => kp.employeeId === employeeId)
   );
 }
+
+export function getAllEmployees(): KPEntry[] {
+  const employeeMap = new Map<string, KPEntry>();
+  MOCK_PROJECTS.forEach(p => {
+    [...p.currentKP, ...p.previousKP].forEach(kp => {
+      employeeMap.set(kp.employeeId, kp);
+    });
+  });
+  return Array.from(employeeMap.values());
+}

@@ -12,42 +12,53 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { getAllRegisteredUsers } from '../services/faceTemplateStore';
 
 type Props = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'AdminLogin'>;
+  navigation: NativeStackNavigationProp<RootStackParamList, 'UserLogin'>;
 };
 
-// Dummy admin credentials (demo only)
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'nhai@2026';
-
-export default function AdminLoginScreen({ navigation }: Props) {
+export default function UserLoginScreen({ navigation }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError]       = useState<string | null>(null);
-  const [loading, setLoading]   = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  function handleLogin() {
+  async function handleLogin() {
     setError(null);
-    const u = username.trim();
+    const u = username.trim().toLowerCase();
     if (!u || !password) {
       setError('Please enter both username and password.');
       return;
     }
+
     setLoading(true);
-    // Simulate a short auth round-trip
-    setTimeout(() => {
-      if (u.toLowerCase() === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-        setLoading(false);
+    try {
+      const users = await getAllRegisteredUsers();
+      const matchedUser = users.find(user => {
+        const firstName = user.name.split(' ')[0].toLowerCase();
+        return firstName === u && user.password === password;
+      });
+
+      if (matchedUser) {
         setUsername('');
         setPassword('');
-        // Route to the project details page (Official dashboard)
-        navigation.replace('Dashboard', { role: 'Official' });
+        navigation.replace('Dashboard', {
+          role: 'PD',
+          matchedUser: {
+            name: matchedUser.name,
+            employeeId: matchedUser.employeeId,
+            position: matchedUser.position,
+          },
+        });
       } else {
-        setLoading(false);
-        setError('Invalid credentials. Please try again.');
+        setError('Invalid username or password. Please try again.');
       }
-    }, 400);
+    } catch (err) {
+      setError('Failed to load user data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -64,15 +75,14 @@ export default function AdminLoginScreen({ navigation }: Props) {
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
 
-          {/* Badge */}
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>ADMIN · CONSOLE</Text>
+            <Text style={styles.badgeText}>USER · LOGIN</Text>
           </View>
 
           <View style={styles.header}>
-            <Text style={styles.title}>Admin Login</Text>
+            <Text style={styles.title}>User Login</Text>
             <Text style={styles.subtitle}>
-              Sign in to view project key-personnel records.
+              Sign in with your registered credentials to view your attendance dashboard.
             </Text>
           </View>
 
@@ -83,11 +93,12 @@ export default function AdminLoginScreen({ navigation }: Props) {
                 style={styles.input}
                 value={username}
                 onChangeText={setUsername}
-                placeholder="admin"
+                placeholder="Your first name"
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+              <Text style={styles.hint}>Enter your first name (e.g., "Rajesh")</Text>
             </View>
 
             <View style={styles.field}>
@@ -118,11 +129,9 @@ export default function AdminLoginScreen({ navigation }: Props) {
             </Text>
           </TouchableOpacity>
 
-          {/* Demo credential hint */}
           <View style={styles.hintCard}>
-            <Text style={styles.hintTitle}>DEMO CREDENTIALS</Text>
-            <Text style={styles.hintLine}>Username: <Text style={styles.hintMono}>admin</Text></Text>
-            <Text style={styles.hintLine}>Password: <Text style={styles.hintMono}>nhai@2026</Text></Text>
+            <Text style={styles.hintTitle}>NOT REGISTERED?</Text>
+            <Text style={styles.hintLine}>Go back and tap "Register Face" to create an account.</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -134,7 +143,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F5F6FA' },
   container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
   backButton: { alignSelf: 'flex-start', paddingVertical: 8, marginBottom: 16 },
-  backText: { color: '#9333EA', fontSize: 15 },
+  backText: { color: '#2563EB', fontSize: 15 },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: '#FFFFFF',
@@ -142,7 +151,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#9333EA',
+    borderColor: '#2563EB',
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -150,13 +159,14 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  badgeText: { color: '#9333EA', fontSize: 11, fontWeight: '600', letterSpacing: 1.5 },
+  badgeText: { color: '#2563EB', fontSize: 11, fontWeight: '600', letterSpacing: 1.5 },
   header: { marginBottom: 32, gap: 8 },
   title: { fontSize: 28, fontWeight: '700', color: '#1E3A5F' },
   subtitle: { fontSize: 14, color: '#6B7280', lineHeight: 21 },
   form: { gap: 20, marginBottom: 28 },
   field: { gap: 8 },
   label: { fontSize: 11, fontWeight: '600', color: '#374151', letterSpacing: 1.2 },
+  hint: { fontSize: 11, color: '#6B7280', marginTop: 2 },
   input: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -169,12 +179,12 @@ const styles = StyleSheet.create({
   },
   error: { color: '#EF4444', fontSize: 13, fontWeight: '500' },
   loginButton: {
-    backgroundColor: '#9333EA',
+    backgroundColor: '#2563EB',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#9333EA',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
@@ -196,6 +206,5 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   hintTitle: { color: '#374151', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 },
-  hintLine: { color: '#6B7280', fontSize: 13 },
-  hintMono: { color: '#9333EA', fontFamily: 'monospace', fontWeight: '600' },
+  hintLine: { color: '#6B7280', fontSize: 13, lineHeight: 20 },
 });

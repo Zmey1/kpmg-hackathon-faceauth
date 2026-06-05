@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import ResultModal from '../components/ResultModal';
+import WelcomeGoodbyePopup from '../components/WelcomeGoodbyePopup';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Result'>;
@@ -18,10 +19,19 @@ type Props = {
 };
 
 export default function ResultScreen({ navigation, route }: Props) {
-  const { success, matchScore, processingMs, matchedUser } = route.params;
+  const { success, matchScore, processingMs, matchedUser, eventType } = route.params;
+  const [showPopup, setShowPopup] = useState(false);
+
+  useEffect(() => {
+    if (success && matchedUser) {
+      setShowPopup(true);
+    }
+  }, [success, matchedUser]);
+
+  const eventLabel = eventType === 'check-out' ? 'Check-Out' : 'Check-In';
 
   const handleRetry = () => {
-    navigation.replace('Verification');
+    navigation.replace('Verification', { eventType });
   };
 
   const handleDone = () => {
@@ -35,7 +45,10 @@ export default function ResultScreen({ navigation, route }: Props) {
         },
       });
     } else {
-      navigation.navigate('Home');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
     }
   };
 
@@ -45,10 +58,10 @@ export default function ResultScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.screenTitle}>Verification Result</Text>
+        <Text style={styles.screenTitle}>{eventLabel} {success ? 'Successful' : 'Failed'}</Text>
 
         <ResultModal
-          metrics={{ success, matchScore, processingMs, matchedUser }}
+          metrics={{ success, matchScore, processingMs, matchedUser, eventType }}
         />
 
         <View style={styles.actions}>
@@ -72,6 +85,16 @@ export default function ResultScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {success && matchedUser && (
+        <WelcomeGoodbyePopup
+          visible={showPopup}
+          type={eventType === 'check-out' ? 'goodbye' : 'welcome'}
+          userName={matchedUser.name.split(' ')[0]}
+          onDismiss={() => setShowPopup(false)}
+          autoDismissMs={3500}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -79,7 +102,7 @@ export default function ResultScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0F1117',
+    backgroundColor: '#F5F6FA',
   },
   container: {
     flexGrow: 1,
@@ -92,7 +115,7 @@ const styles = StyleSheet.create({
   screenTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4B5563',
+    color: '#374151',
     letterSpacing: 1.2,
     textAlign: 'center',
     textTransform: 'uppercase',
@@ -105,11 +128,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#374151',
-    backgroundColor: 'transparent',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   retryButtonText: {
-    color: '#9CA3AF',
+    color: '#6B7280',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -118,20 +141,20 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#374151',
-    backgroundColor: 'transparent',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   doneButtonPrimary: {
     backgroundColor: '#2563EB',
     borderColor: '#2563EB',
     shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
   },
   doneButtonText: {
-    color: '#9CA3AF',
+    color: '#6B7280',
     fontSize: 16,
     fontWeight: '600',
   },

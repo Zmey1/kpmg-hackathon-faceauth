@@ -120,7 +120,7 @@ export default function RegisteredUsersScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#0F1117',
+    backgroundColor: '#F5F6FA',
   },
   header: {
     paddingHorizontal: 24,
@@ -129,14 +129,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   backText: {
-    color: '#6B7280',
+    color: '#2563EB',
     fontSize: 15,
     marginBottom: 8,
   },
   title: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#1E3A5F',
   },
   subtitle: {
     fontSize: 13,
@@ -150,12 +150,12 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 17,
-    color: '#9CA3AF',
+    color: '#6B7280',
     fontWeight: '600',
   },
   emptyHint: {
     fontSize: 13,
-    color: '#4B5563',
+    color: '#9CA3AF',
   },
   list: {
     paddingHorizontal: 20,
@@ -163,14 +163,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   card: {
-    backgroundColor: '#1A1E2E',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#252A3A',
+    borderColor: '#E5E7EB',
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   cardBody: {
     flex: 1,
@@ -179,7 +184,7 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#1F2937',
   },
   cardId: {
     fontSize: 13,
@@ -193,29 +198,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   chip: {
-    backgroundColor: '#252A3A',
+    backgroundColor: '#EFF6FF',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   chipText: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: '#2563EB',
     fontWeight: '600',
   },
   dateText: {
     fontSize: 11,
-    color: '#4B5563',
+    color: '#6B7280',
   },
   deleteButton: {
     borderWidth: 1,
-    borderColor: '#7F1D1D',
+    borderColor: '#FEE2E2',
+    backgroundColor: '#FEF2F2',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   deleteButtonText: {
-    color: '#EF4444',
+    color: '#DC2626',
     fontSize: 13,
     fontWeight: '600',
   },

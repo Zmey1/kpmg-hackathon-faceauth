@@ -140,21 +140,26 @@ function DropdownModal({
 const dStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   sheet: {
-    backgroundColor: '#1A1E2E',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#252A3A',
+    borderColor: '#E5E7EB',
     padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   title: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4B5563',
+    color: '#374151',
     letterSpacing: 1.2,
     marginBottom: 12,
   },
@@ -167,14 +172,15 @@ const dStyles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
-  itemActive: { backgroundColor: '#252A3A' },
-  itemText: { fontSize: 15, color: '#9CA3AF' },
-  itemTextActive: { color: '#FFFFFF', fontWeight: '600' },
+  itemActive: { backgroundColor: '#EFF6FF' },
+  itemText: { fontSize: 15, color: '#6B7280' },
+  itemTextActive: { color: '#1F2937', fontWeight: '600' },
   check: { color: '#2563EB', fontWeight: '700', fontSize: 16 },
 });
 
 export default function RegistrationFormScreen({ navigation }: Props) {
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [orgCategory, setOrgCategory] = useState<OrgCategory | null>(null);
   const [orgName, setOrgName] = useState('');
   const [position, setPosition] = useState('');
@@ -198,6 +204,8 @@ export default function RegistrationFormScreen({ navigation }: Props) {
 
   async function handleContinue() {
     if (!name.trim()) { Alert.alert('Required', 'Please enter your full name.'); return; }
+    if (!password.trim()) { Alert.alert('Required', 'Please enter a password.'); return; }
+    if (password.length < 4) { Alert.alert('Invalid', 'Password must be at least 4 characters.'); return; }
     if (!orgCategory) { Alert.alert('Required', 'Please select an organisation category.'); return; }
     if (!orgName.trim()) { Alert.alert('Required', 'Please enter your organisation name.'); return; }
     if (orgCategory === 'AE/IE' && isKP === null) {
@@ -214,6 +222,7 @@ export default function RegistrationFormScreen({ navigation }: Props) {
       navigation.navigate('FaceRegistrationCamera', {
         employeeId,
         name: name.trim(),
+        password: password.trim(),
         role,
         position,
         organisationCategory: orgCategory,
@@ -313,8 +322,24 @@ export default function RegistrationFormScreen({ navigation }: Props) {
                 value={name}
                 onChangeText={setName}
                 placeholder="Enter your full name"
-                placeholderTextColor="#4B5563"
+                placeholderTextColor="#9CA3AF"
                 autoCapitalize="words"
+                autoCorrect={false}
+              />
+              <Text style={styles.hint}>Username will be your first name (e.g., "Rajesh")</Text>
+            </View>
+
+            {/* 1b. Password */}
+            <View style={styles.field}>
+              <Text style={styles.label}>PASSWORD</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Create a password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry
+                autoCapitalize="none"
                 autoCorrect={false}
               />
             </View>
@@ -342,7 +367,7 @@ export default function RegistrationFormScreen({ navigation }: Props) {
                 value={orgName}
                 onChangeText={setOrgName}
                 placeholder="Enter organisation name"
-                placeholderTextColor="#4B5563"
+                placeholderTextColor="#9CA3AF"
                 autoCapitalize="words"
                 autoCorrect={false}
               />
@@ -446,29 +471,30 @@ export default function RegistrationFormScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0F1117' },
+  safe: { flex: 1, backgroundColor: '#F5F6FA' },
   container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
   backButton: { alignSelf: 'flex-start', paddingVertical: 8, marginBottom: 24 },
-  backText: { color: '#6B7280', fontSize: 15 },
+  backText: { color: '#2563EB', fontSize: 15 },
   header: { marginBottom: 32 },
-  title: { fontSize: 28, fontWeight: '700', color: '#FFFFFF' },
+  title: { fontSize: 28, fontWeight: '700', color: '#1E3A5F' },
   form: { gap: 20, marginBottom: 36 },
   field: { gap: 8 },
-  label: { fontSize: 11, fontWeight: '600', color: '#4B5563', letterSpacing: 1.2 },
+  label: { fontSize: 11, fontWeight: '600', color: '#374151', letterSpacing: 1.2 },
+  hint: { fontSize: 11, color: '#6B7280', marginTop: 4 },
   input: {
-    backgroundColor: '#1A1E2E',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#252A3A',
+    borderColor: '#E5E7EB',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#FFFFFF',
+    color: '#1F2937',
   },
   dropdownTrigger: {
-    backgroundColor: '#1A1E2E',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#252A3A',
+    borderColor: '#E5E7EB',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -476,15 +502,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  dropdownValue: { fontSize: 16, color: '#FFFFFF' },
-  dropdownPlaceholder: { fontSize: 16, color: '#4B5563' },
+  dropdownValue: { fontSize: 16, color: '#1F2937' },
+  dropdownPlaceholder: { fontSize: 16, color: '#9CA3AF' },
   dropdownArrow: { fontSize: 16, color: '#6B7280' },
   radioRow: { flexDirection: 'row', gap: 10 },
   radioBtn: {
     flex: 1,
-    backgroundColor: '#1A1E2E',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#252A3A',
+    borderColor: '#E5E7EB',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 14,
@@ -492,14 +518,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  radioBtnKP: { borderColor: '#2563EB', backgroundColor: '#1E2A45' },
-  radioBtnNonKP: { borderColor: '#7C3AED', backgroundColor: '#1E1432' },
+  radioBtnKP: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
+  radioBtnNonKP: { borderColor: '#7C3AED', backgroundColor: '#F5F3FF' },
   radioCircle: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#4B5563',
+    borderColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -508,18 +534,18 @@ const styles = StyleSheet.create({
   radioFillKP: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2563EB' },
   radioFillNonKP: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#7C3AED' },
   radioLabel: { fontSize: 15, fontWeight: '700', color: '#6B7280' },
-  radioLabelActive: { color: '#FFFFFF' },
-  radioSub: { fontSize: 11, color: '#374151', marginTop: 1 },
+  radioLabelActive: { color: '#1F2937' },
+  radioSub: { fontSize: 11, color: '#6B7280', marginTop: 1 },
   kpRow: { flexDirection: 'row', gap: 12 },
   personnelCard: {
     width: CARD_WIDTH,
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 8,
-    backgroundColor: '#1A1E2E',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#252A3A',
+    borderColor: '#E5E7EB',
     gap: 10,
   },
   photoFrame: {
@@ -527,7 +553,7 @@ const styles = StyleSheet.create({
     height: 76,
     borderRadius: 38,
     borderWidth: 2.5,
-    borderColor: '#2A2E40',
+    borderColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -558,12 +584,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#0F1117',
+    borderColor: '#FFFFFF',
   },
   checkBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
   kpLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#6B7280',
     textAlign: 'center',
     fontWeight: '500',
     lineHeight: 16,
@@ -576,11 +602,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
   },
   buttonBusy: { opacity: 0.7 },
   continueButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
-  note: { fontSize: 13, color: '#374151', textAlign: 'center', lineHeight: 19 },
+  note: { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 19 },
 });

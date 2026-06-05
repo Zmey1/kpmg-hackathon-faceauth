@@ -29,6 +29,7 @@ export interface VerificationEventPayload {
   miniFASNetScore?: number;
   processingMs:    number;
   timestamp:       string;
+  eventType?:      'check-in' | 'check-out';
 }
 
 export interface FaceTemplatePayload {
@@ -183,6 +184,15 @@ export async function processQueue(): Promise<number> {
   } finally {
     _isSyncing = false;
   }
+}
+
+/**
+ * Returns all VERIFICATION_EVENT items from the local sync queue.
+ * Used as an offline fallback when the AWS attendance endpoint is unreachable.
+ */
+export async function getLocalVerificationEvents(): Promise<SyncQueueItem[]> {
+  const queue = await readQueue();
+  return queue.filter(i => i.type === 'VERIFICATION_EVENT');
 }
 
 // ─── Network listener ──────────────────────────────────────────────────────────

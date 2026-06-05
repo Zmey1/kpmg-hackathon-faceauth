@@ -24,7 +24,8 @@ function MetricRow({ label, value, highlight }: MetricRowProps) {
 }
 
 export default function ResultModal({ metrics }: ResultModalProps) {
-  const { success, matchScore, processingMs, matchedUser } = metrics;
+  const { success, matchScore, processingMs, matchedUser, eventType } = metrics;
+  const eventLabel = eventType === 'check-out' ? 'Check-Out' : 'Check-In';
 
   return (
     <View style={[styles.card, success ? styles.cardSuccess : styles.cardFailure]}>
@@ -34,7 +35,7 @@ export default function ResultModal({ metrics }: ResultModalProps) {
           <Text style={styles.iconText}>{success ? '✓' : '✕'}</Text>
         </View>
         <Text style={styles.headline}>
-          {success ? 'Authentication Successful' : 'Authentication Failed'}
+          {success ? `${eventLabel} Successful` : `${eventLabel} Failed`}
         </Text>
         {success && matchedUser ? (
           <View style={styles.userInfo}>
@@ -85,14 +86,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderWidth: 1,
     marginHorizontal: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   cardSuccess: {
-    backgroundColor: '#0D2018',
-    borderColor: '#166534',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
   },
   cardFailure: {
-    backgroundColor: '#1F0A0A',
-    borderColor: '#7F1D1D',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
   },
   header: {
     alignItems: 'center',
@@ -108,29 +114,29 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   iconCircleSuccess: {
-    backgroundColor: '#14532D',
+    backgroundColor: '#DCFCE7',
     borderWidth: 2,
     borderColor: '#22C55E',
   },
   iconCircleFailure: {
-    backgroundColor: '#450A0A',
+    backgroundColor: '#FEE2E2',
     borderWidth: 2,
     borderColor: '#EF4444',
   },
   iconText: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#1F2937',
   },
   headline: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#1F2937',
     textAlign: 'center',
   },
   subheadline: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: '#6B7280',
     textAlign: 'center',
   },
   userInfo: {
@@ -141,24 +147,24 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#22C55E',
+    color: '#16A34A',
     textAlign: 'center',
   },
   userEmployeeId: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: '#6B7280',
     textAlign: 'center',
     letterSpacing: 0.5,
     fontWeight: '500',
   },
   userPosition: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#9CA3AF',
     textAlign: 'center',
   },
   divider: {
     height: 1,
-    backgroundColor: '#1F2937',
+    backgroundColor: '#E5E7EB',
     marginBottom: 24,
   },
   metrics: {
@@ -176,9 +182,9 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#D1D5DB',
+    color: '#374151',
   },
   metricValueHighlight: {
-    color: '#22C55E',
+    color: '#16A34A',
   },
 });
